@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100%" height="100%">
+  <defs>
+    <linearGradient id="schoolGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb" />
+      <stop offset="100%" stop-color="#1d4ed8" />
+    </linearGradient>
+  </defs>
+  <rect width="100" height="100" rx="22" fill="url(#schoolGrad)"/>
+  <path d="M50 20 L22 36 L78 36 Z" fill="#ffffff" />
+  <rect x="27" y="40" width="8" height="24" rx="2" fill="#ffffff" opacity="0.9" />
+  <rect x="41" y="40" width="8" height="24" rx="2" fill="#ffffff" opacity="0.9" />
+  <rect x="55" y="40" width="8" height="24" rx="2" fill="#ffffff" opacity="0.9" />
+  <rect x="69" y="40" width="8" height="24" rx="2" fill="#ffffff" opacity="0.9" />
+  <rect x="20" y="68" width="60" height="10" rx="3" fill="#ffffff" />
+  <circle cx="74" cy="26" r="12" fill="#ef4444" />
+  <path d="M74 19 L74 27 M74 30 L74 31" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" />
+</svg>

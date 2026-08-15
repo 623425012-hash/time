@@ -1,0 +1,26 @@
+{
+  "version": 2,
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/$1"
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/scheduler/cron",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/scheduler/cron",
+      "schedule": "0 1 * * *"
+    }
+  ]
+}

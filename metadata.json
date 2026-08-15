@@ -1,0 +1,8 @@
+{
+  "name": "ใหม่ ระบบปฏิทินแจ้งเตือนกิจกรรมโรงเรียน",
+  "description": "ระบบบริหารจัดการปฏิทินกิจกรรมโรงเรียน ตารางเวร วันหยุดไทย อนุมัติกิจกรรม และระบบแจ้งเตือน Telegram อัตโนมัติ",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
