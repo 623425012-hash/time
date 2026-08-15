@@ -13,6 +13,17 @@ import {
   ActivityLog,
   EventAttachment,
 } from '../types';
+import {
+  sendTelegramDirect,
+  formatEventMessage,
+  formatEventChangeMessage,
+  formatDutyGroupReminderMessage,
+  formatBirthdayGreetingMessage,
+  formatAnnouncementMessage,
+  formatDailySummaryMessage,
+  formatTestMessage,
+} from '../utils/telegramDirect';
+import { formatThaiDate, formatThaiDateRange } from '../utils/thaiDate';
 
 const STORAGE_KEY = 'school_calendar_local_db_v2';
 
@@ -540,8 +551,69 @@ class LocalStore {
     return this.data;
   }
 
+  // Core Telegram Notification Dispatcher for LocalStore / Vercel
+  public async dispatchTelegram(
+    text: string,
+    type: TelegramLog['type'] = 'EVENT_NEW',
+    eventId?: string,
+    overrideToken?: string,
+    overrideChatId?: string,
+    skipEnabledCheck = false
+  ): Promise<{ success: boolean; message: string; rawError?: string }> {
+    const settings = this.data.telegramSettings;
+    const isEnabled = settings.enabled || skipEnabledCheck || !!overrideToken;
+    if (!isEnabled && !overrideToken) {
+      return { success: false, message: 'การแจ้งเตือน Telegram ถูกปิดการใช้งานอยู่ในการตั้งค่า' };
+    }
+
+    const token = (overrideToken || settings.botToken || (typeof process !== 'undefined' ? process.env?.TELEGRAM_BOT_TOKEN : '') || '').trim();
+    const chatId = (overrideChatId || settings.chatId || (typeof process !== 'undefined' ? process.env?.TELEGRAM_CHAT_ID : '') || '').trim();
+
+    if (!token || !chatId) {
+      const errorMsg = 'ยังไม่ได้ระบุ Telegram Bot Token หรือ Chat ID (กรุณาตั้งค่าในเมนู "ตั้งค่าการแจ้งเตือน Telegram")';
+      const log: TelegramLog = {
+        id: `notif-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+        eventId,
+        type,
+        recipient: chatId || 'N/A',
+        content: text,
+        sentAt: new Date().toISOString(),
+        status: 'FAILED',
+        errorMessage: errorMsg,
+      };
+      this.data.notificationLogs.unshift(log);
+      this.save();
+      return { success: false, message: errorMsg };
+    }
+
+    const result = await sendTelegramDirect(token, chatId, text);
+
+    const log: TelegramLog = {
+      id: `notif-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      eventId,
+      type,
+      recipient: chatId,
+      content: text,
+      sentAt: new Date().toISOString(),
+      status: result.success ? 'SUCCESS' : 'FAILED',
+      errorMessage: result.success ? undefined : (result.message || result.error || 'Failed to send Telegram message'),
+    };
+
+    this.data.notificationLogs.unshift(log);
+    if (this.data.notificationLogs.length > 200) {
+      this.data.notificationLogs = this.data.notificationLogs.slice(0, 200);
+    }
+    this.save();
+
+    return {
+      success: result.success,
+      message: result.message,
+      rawError: result.error,
+    };
+  }
+
   // Router handler for mock/fallback requests
-  public handleMockRequest(endpoint: string, options: RequestInit = {}): any {
+  public async handleMockRequest(endpoint: string, options: RequestInit = {}): Promise<any> {
     const method = (options.method || 'GET').toUpperCase();
     const cleanUrl = endpoint.replace(/^\/api/, '');
     const [pathPart, queryPart] = cleanUrl.split('?');
@@ -750,6 +822,8 @@ class LocalStore {
         return { message: 'ลบหมวดหมู่กิจกรรมสำเร็จ' };
       }
     }
+
+    // Events Main Routes
     if (pathPart === '/events') {
       if (method === 'GET') {
         const includePending = params.get('includePending') === 'true';
@@ -776,7 +850,7 @@ class LocalStore {
           department: body.department || 'ทั่วไป',
           targetGroup: body.targetGroup || 'ทุกคน',
           priority: body.priority || 'NORMAL',
-          status: 'APPROVED',
+          status: body.status || 'APPROVED',
           attachments: body.attachments || [],
           recurrence: body.recurrence || 'NONE',
           notifySchedule: body.notifySchedule || ['1_DAY_BEFORE'],
@@ -787,6 +861,13 @@ class LocalStore {
         };
         this.data.events.push(newEvt);
         this.save();
+
+        // Send Telegram notification if approved and requested
+        if (newEvt.sendTelegram && newEvt.status === 'APPROVED') {
+          const msg = formatEventMessage(newEvt, this.data.systemSettings.schoolName, '✅ <b>กิจกรรมโรงเรียนใหม่</b>');
+          this.dispatchTelegram(msg, 'EVENT_NEW', newEvt.id).catch((err) => console.warn('[Telegram Dispatch]', err));
+        }
+
         return { message: 'สร้างกิจกรรมสำเร็จ', event: newEvt };
       }
     }
@@ -803,6 +884,12 @@ class LocalStore {
       if (subAction === 'approve' && evt) {
         evt.status = 'APPROVED';
         this.save();
+
+        if (evt.sendTelegram) {
+          const msg = formatEventMessage(evt, this.data.systemSettings.schoolName, '✅ <b>อนุมัติกิจกรรมโรงเรียนเรียบร้อย</b>');
+          await this.dispatchTelegram(msg, 'EVENT_APPROVED', evt.id);
+        }
+
         return { message: 'อนุมัติกิจกรรมสำเร็จ', event: evt };
       }
       if (subAction === 'reject' && evt) {
@@ -811,7 +898,9 @@ class LocalStore {
         return { message: 'ปฏิเสธกิจกรรมเรียบร้อยแล้ว', event: evt };
       }
       if (subAction === 'notify-telegram' && evt) {
-        return { success: true, message: 'ส่งข้อความแจ้งเตือนผ่าน Telegram สำเร็จ' };
+        const msg = formatEventMessage(evt, this.data.systemSettings.schoolName, '📢 <b>แจ้งเตือนกิจกรรมโรงเรียน</b>');
+        const res = await this.dispatchTelegram(msg, 'EVENT_NEW', evt.id, undefined, undefined, true);
+        return res;
       }
       if (method === 'DELETE' && evtIndex >= 0) {
         this.data.events.splice(evtIndex, 1);
@@ -820,8 +909,25 @@ class LocalStore {
       }
       if (method === 'PUT' && evt) {
         const body = typeof options.body === 'string' ? JSON.parse(options.body) : options.body || {};
+        const oldSnapshot = {
+          title: evt.title,
+          date: evt.startDate === evt.endDate ? formatThaiDate(evt.startDate, { format: 'medium' }) : formatThaiDateRange(evt.startDate, evt.endDate),
+          time: evt.isAllDay ? 'ตลอดวัน' : `${evt.startTime} - ${evt.endTime} น.`,
+          location: evt.location || '-',
+          coordinator: evt.coordinator || '-',
+        };
+
+        const wasApproved = evt.status === 'APPROVED';
         Object.assign(evt, body);
         this.save();
+
+        if (evt.status === 'APPROVED' && evt.sendTelegram) {
+          if (wasApproved && (body.startDate || body.startTime || body.location || body.coordinator)) {
+            const changeMsg = formatEventChangeMessage(oldSnapshot, evt, this.data.systemSettings.schoolName);
+            this.dispatchTelegram(changeMsg, 'EVENT_CHANGED', evt.id).catch((err) => console.warn('[Telegram Change Dispatch]', err));
+          }
+        }
+
         return { message: 'แก้ไขกิจกรรมสำเร็จ', event: evt };
       }
     }
@@ -929,6 +1035,13 @@ class LocalStore {
         this.data.dutySchedules.push(sched);
       }
       this.save();
+
+      // If requested to send notification immediately
+      if (body.sendTelegramNow && grp) {
+        const msg = formatDutyGroupReminderMessage(sched, grp, this.data.systemSettings.schoolName);
+        this.dispatchTelegram(msg, 'DUTY_REMINDER', undefined, undefined, undefined, true).catch(console.error);
+      }
+
       return { message: 'บันทึกตารางเวรสำเร็จ', schedule: sched };
     }
     if (pathPart.startsWith('/duties/schedule/')) {
@@ -936,8 +1049,19 @@ class LocalStore {
       const idOrDate = parts[3];
       const subAction = parts[4];
       const idx = this.data.dutySchedules.findIndex((s) => s.id === idOrDate || s.date === idOrDate);
+      const sched = this.data.dutySchedules[idx];
+
       if (subAction === 'notify-telegram') {
-        return { success: true, message: 'ส่งแจ้งเตือนครูเวรผ่าน Telegram สำเร็จ' };
+        if (!sched) {
+          return { success: false, message: 'ไม่พบข้อมูลตารางเวรที่ระบุ' };
+        }
+        const grp = this.data.dutyGroups.find((g) => g.id === sched.groupId);
+        if (!grp) {
+          return { success: false, message: 'ไม่พบชุดเวรสำหรับตารางนี้' };
+        }
+        const msg = formatDutyGroupReminderMessage(sched, grp, this.data.systemSettings.schoolName);
+        const res = await this.dispatchTelegram(msg, 'DUTY_REMINDER', undefined, undefined, undefined, true);
+        return res;
       }
       if (method === 'DELETE' && idx >= 0) {
         this.data.dutySchedules.splice(idx, 1);
@@ -976,8 +1100,15 @@ class LocalStore {
       const id = parts[2];
       const subAction = parts[3];
       const idx = this.data.birthdays.findIndex((b) => b.id === id);
+      const bday = this.data.birthdays[idx];
+
       if (subAction === 'wish' || subAction === 'send-greeting') {
-        return { success: true, message: 'ส่งคำอวยพรวันเกิดผ่าน Telegram สำเร็จ' };
+        if (!bday) {
+          return { success: false, message: 'ไม่พบข้อมูลบุคลากรที่ระบุ' };
+        }
+        const msg = formatBirthdayGreetingMessage(bday, this.data.systemSettings.schoolName);
+        const res = await this.dispatchTelegram(msg, 'BIRTHDAY', undefined, undefined, undefined, true);
+        return res;
       }
       if (method === 'DELETE' && idx >= 0) {
         this.data.birthdays.splice(idx, 1);
@@ -1015,12 +1146,28 @@ class LocalStore {
         };
         this.data.announcements.push(newAnn);
         this.save();
+
+        if (newAnn.sendTelegram) {
+          const msg = formatAnnouncementMessage(newAnn, this.data.systemSettings.schoolName);
+          this.dispatchTelegram(msg, 'ANNOUNCEMENT', undefined, undefined, undefined, true).catch(console.error);
+        }
+
         return { message: 'สร้างประกาศสำเร็จ', announcement: newAnn };
       }
     }
     if (pathPart.startsWith('/announcements/')) {
-      const id = pathPart.split('/')[2];
+      const parts = pathPart.split('/');
+      const id = parts[2];
+      const subAction = parts[3];
       const idx = this.data.announcements.findIndex((a) => a.id === id);
+      const ann = this.data.announcements[idx];
+
+      if (subAction === 'broadcast-telegram') {
+        if (!ann) return { success: false, message: 'ไม่พบประกาศที่ระบุ' };
+        const msg = formatAnnouncementMessage(ann, this.data.systemSettings.schoolName);
+        const res = await this.dispatchTelegram(msg, 'ANNOUNCEMENT', undefined, undefined, undefined, true);
+        return res;
+      }
       if (method === 'DELETE' && idx >= 0) {
         this.data.announcements.splice(idx, 1);
         this.save();
@@ -1136,8 +1283,63 @@ class LocalStore {
       }
       return { logs: this.data.notificationLogs };
     }
-    if (pathPart === '/settings/telegram/test' || pathPart === '/settings/telegram/broadcast-daily' || pathPart === '/settings/telegram/broadcast-duty-today' || pathPart === '/settings/telegram/broadcast-birthdays-today') {
-      return { success: true, message: 'ส่งข้อความแจ้งเตือน Telegram สำเร็จ' };
+    if (pathPart === '/settings/telegram/test') {
+      const body = typeof options.body === 'string' ? JSON.parse(options.body) : options.body || {};
+      const msg = formatTestMessage(this.data.systemSettings.schoolName);
+      const res = await this.dispatchTelegram(
+        msg,
+        'SYSTEM_ALERT',
+        undefined,
+        body.botToken,
+        body.chatId,
+        true
+      );
+      return res;
+    }
+    if (pathPart === '/settings/telegram/broadcast-daily' || pathPart === '/settings/telegram/trigger-daily-summary') {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const todaySched = (this.data.dutySchedules || []).find((s) => s.date === todayStr);
+      const todayGrp = todaySched ? (this.data.dutyGroups || []).find((g) => g.id === todaySched.groupId) || null : null;
+      const todayMMDD = todayStr.substring(5);
+      const todayBirthdays = (this.data.birthdays || []).filter((b) => b.birthDate && b.birthDate.endsWith(todayMMDD));
+      const msg = formatDailySummaryMessage(
+        this.data.events,
+        todaySched || null,
+        todayGrp || null,
+        todayBirthdays,
+        this.data.systemSettings.schoolName,
+        todayStr
+      );
+      const res = await this.dispatchTelegram(msg, 'DAILY_SUMMARY', undefined, undefined, undefined, true);
+      return res;
+    }
+    if (pathPart === '/settings/telegram/broadcast-duty-today') {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const todaySched = (this.data.dutySchedules || []).find((s) => s.date === todayStr);
+      if (!todaySched) {
+        return { success: false, message: 'ไม่พบตารางเวรสำหรับวันนี้' };
+      }
+      const grp = (this.data.dutyGroups || []).find((g) => g.id === todaySched.groupId);
+      if (!grp) {
+        return { success: false, message: 'ไม่พบชุดเวรสำหรับวันนี้' };
+      }
+      const msg = formatDutyGroupReminderMessage(todaySched, grp, this.data.systemSettings.schoolName);
+      const res = await this.dispatchTelegram(msg, 'DUTY_REMINDER', undefined, undefined, undefined, true);
+      return res;
+    }
+    if (pathPart === '/settings/telegram/broadcast-birthdays-today') {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const todayMMDD = todayStr.substring(5);
+      const todayBirthdays = (this.data.birthdays || []).filter((b) => b.birthDate && b.birthDate.endsWith(todayMMDD));
+      if (todayBirthdays.length === 0) {
+        return { success: false, message: 'วันนี้ไม่มีบุคลากรที่มีวันคล้ายวันเกิด' };
+      }
+      let lastRes = { success: true, message: `ส่งคำอวยพรวันเกิดสำเร็จ ${todayBirthdays.length} ท่าน` };
+      for (const b of todayBirthdays) {
+        const msg = formatBirthdayGreetingMessage(b, this.data.systemSettings.schoolName);
+        lastRes = await this.dispatchTelegram(msg, 'BIRTHDAY', undefined, undefined, undefined, true);
+      }
+      return lastRes;
     }
     if (pathPart === '/settings/reset-default') {
       const def = this.resetToDefault();

@@ -84,6 +84,24 @@ export const AnnouncementView: React.FC = () => {
     setModalOpen(true);
   };
 
+  const [broadcastingAnnId, setBroadcastingAnnId] = useState<string | null>(null);
+
+  const handleBroadcastTelegram = async (ann: SchoolAnnouncement) => {
+    setBroadcastingAnnId(ann.id);
+    try {
+      const res = await api.post<{ success: boolean; message: string }>(`/announcements/${ann.id}/broadcast-telegram`);
+      if (res.success) {
+        showToast('success', 'ส่งข่าวสารผ่าน Telegram สำเร็จ', `กระจายข่าวสาร "${ann.title}" ไปยังกลุ่ม Telegram เรียบร้อยแล้ว`);
+      } else {
+        showToast('warning', 'ส่งไม่สำเร็จ', res.message || 'กรุณาตรวจสอบการตั้งค่า Telegram Bot');
+      }
+    } catch (err: any) {
+      showToast('error', 'ส่งข่าวสารไม่สำเร็จ', err?.message || 'เกิดข้อผิดพลาดในการส่งข้อความ');
+    } finally {
+      setBroadcastingAnnId(null);
+    }
+  };
+
   const handleDelete = (ann: SchoolAnnouncement) => {
     confirm({
       title: 'ยืนยันการลบประกาศ?',
@@ -244,6 +262,18 @@ export const AnnouncementView: React.FC = () => {
 
                   {canManage && (
                     <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => handleBroadcastTelegram(ann)}
+                        disabled={broadcastingAnnId === ann.id}
+                        className="p-2 rounded-xl text-slate-400 hover:text-sky-500 hover:bg-sky-50 dark:hover:bg-sky-950/40 transition-colors disabled:opacity-50"
+                        title="ส่งแจ้งเตือน Telegram ทันที"
+                      >
+                        {broadcastingAnnId === ann.id ? (
+                          <span className="inline-block w-4 h-4 border-2 border-sky-500 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <Send className="w-4 h-4 text-sky-500" />
+                        )}
+                      </button>
                       <button
                         onClick={() => handleOpenEdit(ann)}
                         className="p-2 rounded-xl text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"

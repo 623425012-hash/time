@@ -41,7 +41,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       }
       // If 200 OK but returned HTML (e.g. SPA fallback index.html for unhandled /api path)
       console.warn(`[API Client] Server returned HTML/non-JSON for ${endpoint}. Falling back to local data store.`);
-      const fallbackResult = localStore.handleMockRequest(endpoint, options);
+      const fallbackResult = await localStore.handleMockRequest(endpoint, options);
       return fallbackResult as T;
     }
 
@@ -57,7 +57,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       console.warn(
         `[API Client] Server returned status ${response.status} for ${endpoint}. Falling back to local store.`
       );
-      const fallbackResult = localStore.handleMockRequest(endpoint, options);
+      const fallbackResult = await localStore.handleMockRequest(endpoint, options);
       return fallbackResult as T;
     }
 
@@ -71,7 +71,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     } catch {
       // If parsing error JSON failed (e.g. server returned HTML error page)
       console.warn(`[API Client] Error response was not JSON for ${endpoint}. Falling back to local data store.`);
-      const fallbackResult = localStore.handleMockRequest(endpoint, options);
+      const fallbackResult = await localStore.handleMockRequest(endpoint, options);
       return fallbackResult as T;
     }
 
@@ -87,7 +87,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
         !err.message.startsWith('HTTP Error'))
     ) {
       console.warn(`[API Client] Request to ${endpoint} failed (${err?.message}). Using offline local store.`);
-      const fallbackResult = localStore.handleMockRequest(endpoint, options);
+      const fallbackResult = await localStore.handleMockRequest(endpoint, options);
       return fallbackResult as T;
     }
     throw err;
