@@ -33,7 +33,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenLogin,
   pendingCount = 0,
 }) => {
-  const { user, logout, quickLogin, isAdmin } = useAuth();
+  const { user, logout, quickLogin, isAdmin, isViewer } = useAuth();
   const { themeMode, setThemeMode, systemSettings } = useTheme();
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState('');
@@ -152,7 +152,17 @@ export const Header: React.FC<HeaderProps> = ({
         )}
 
         {/* User Profile / Login Dropdown */}
-        {user ? (
+        {isViewer ? (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onOpenLogin}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-bold shadow-md transition-all cursor-pointer"
+            >
+              <LogIn className="w-4 h-4" />
+              <span>เข้าสู่ระบบ</span>
+            </button>
+          </div>
+        ) : user ? (
           <div className="relative">
             <button
               onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}

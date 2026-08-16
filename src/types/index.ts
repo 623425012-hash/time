@@ -314,4 +314,5 @@ export type ActiveNavTab =
   | 'reports'
   | 'users'
   | 'settings'
-  | 'logs';
+  | 'logs'
+  | 'login';

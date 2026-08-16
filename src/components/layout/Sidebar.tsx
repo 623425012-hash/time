@@ -17,6 +17,8 @@ import {
   ScrollText,
   School,
   X,
+  LogIn,
+  KeyRound,
 } from 'lucide-react';
 import { ActiveNavTab } from '../../types';
 import { useAuth } from '../../context/AuthContext';
@@ -70,6 +72,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'users', label: 'จัดการผู้ใช้งาน', icon: Users2, hide: isViewer || !hasPermission('users.view') },
     { id: 'settings', label: 'ตั้งค่าระบบ', icon: Settings, hide: isViewer || !hasPermission('settings.manage') },
     { id: 'logs', label: 'Activity Log', icon: ScrollText, hide: isViewer || !hasPermission('logs.view') },
+    { id: 'login', label: 'เข้าสู่ระบบ (Login)', icon: LogIn, hide: !isViewer },
   ];
 
   return (
@@ -180,7 +183,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </nav>
 
         {/* Bottom User Info & Role Tag */}
-        <div className="p-4 border-t border-white/10 shrink-0 bg-black/20">
+        <div className="p-3.5 border-t border-white/10 shrink-0 bg-black/20 space-y-2">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center font-bold text-white text-sm shrink-0">
               {user ? user.name.charAt(0) : 'G'}
@@ -205,6 +208,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
             </div>
           </div>
+
+          {isViewer && (
+            <button
+              onClick={() => {
+                setActiveTab('login');
+                setMobileOpen(false);
+              }}
+              className="w-full py-2 px-3 rounded-xl bg-blue-600/80 hover:bg-blue-600 active:scale-95 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>เข้าสู่ระบบ (Staff / Admin)</span>
+            </button>
+          )}
         </div>
       </aside>
     </>

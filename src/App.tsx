@@ -22,6 +22,7 @@ import { EventManagerView } from './components/events/EventManagerView';
 import { UserView } from './components/users/UserView';
 import { SettingView } from './components/settings/SettingView';
 import { LogView } from './components/logs/LogView';
+import { LoginView } from './components/auth/LoginView';
 import {
   ActiveNavTab,
   SchoolEvent,
@@ -41,7 +42,7 @@ function AppContent() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Allowed tabs for Viewer role
-  const VIEWER_ALLOWED_TABS: ActiveNavTab[] = ['dashboard', 'calendar', 'duties', 'announcements'];
+  const VIEWER_ALLOWED_TABS: ActiveNavTab[] = ['dashboard', 'calendar', 'duties', 'announcements', 'login'];
 
   // Guard against navigating to unauthorized tabs
   useEffect(() => {
@@ -162,7 +163,7 @@ function AppContent() {
         <Header
           onOpenMobileMenu={() => setMobileMenuOpen(true)}
           onOpenSearch={() => setSearchModalOpen(true)}
-          onOpenLogin={() => setLoginModalOpen(true)}
+          onOpenLogin={() => setActiveTab('login')}
           pendingCount={summary.pendingEventsCount}
           todayCount={summary.todayEventsCount}
         />
@@ -170,6 +171,16 @@ function AppContent() {
         {/* Scrollable View Area */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <div className="max-w-7xl mx-auto">
+            {activeTab === 'login' && (
+              <LoginView
+                onSuccess={() => {
+                  setActiveTab('dashboard');
+                  refreshAll();
+                }}
+                onContinueAsViewer={() => setActiveTab('dashboard')}
+              />
+            )}
+
             {activeTab === 'dashboard' && (
               <DashboardView
                 summary={summary}

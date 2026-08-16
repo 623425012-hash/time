@@ -16,6 +16,7 @@ import {
   ClipboardList,
   PlusCircle,
   ArrowUpRight,
+  LogIn,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import {
@@ -107,6 +108,32 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
+      {/* Viewer Welcome & Login Prompt */}
+      {isViewer && (
+        <div className="p-4 sm:p-5 rounded-3xl bg-linear-to-r from-blue-600 to-indigo-600 text-white shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white shrink-0">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-sm font-bold">
+                ยินดีต้อนรับสู่ระบบปฏิทินกิจกรรมและตารางเวรโรงเรียน
+              </p>
+              <p className="text-xs text-blue-100 mt-0.5">
+                ขณะนี้คุณกำลังเข้าชมในฐานะ <strong>ผู้เยี่ยมชม (Viewer)</strong> — ครูและบุคลากรสามารถเข้าสู่ระบบเพื่อจัดการกิจกรรมได้
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => onNavigateTab('login')}
+            className="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-blue-700 hover:bg-blue-50 active:scale-95 text-xs font-bold shadow-xs transition-all cursor-pointer"
+          >
+            <LogIn className="w-4 h-4" />
+            <span>เข้าสู่ระบบ (Login)</span>
+          </button>
+        </div>
+      )}
+
       {/* Birthday Celebration Banner if any */}
       {todayBirthdays && todayBirthdays.length > 0 && (
         <div className="relative overflow-hidden rounded-3xl bg-linear-to-r from-amber-500 via-pink-500 to-purple-600 p-5 text-white shadow-lg">
