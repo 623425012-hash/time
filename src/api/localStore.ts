@@ -17,6 +17,8 @@ import {
   sendTelegramDirect,
   formatEventMessage,
   formatEventChangeMessage,
+  formatAdvanceEventReminderMessage,
+  formatAdvanceDutyReminderMessage,
   formatDutyGroupReminderMessage,
   formatBirthdayGreetingMessage,
   formatAnnouncementMessage,
@@ -545,6 +547,10 @@ class LocalStore {
     this.persist(this.data);
   }
 
+  public saveData() {
+    this.persist(this.data);
+  }
+
   public resetToDefault(): LocalDatabaseSchema {
     this.data = getInitialLocalDatabase();
     this.save();
@@ -553,13 +559,57 @@ class LocalStore {
 
   // Core Telegram Notification Dispatcher for LocalStore / Vercel
   public async dispatchTelegram(
-    text: string,
-    type: TelegramLog['type'] = 'EVENT_NEW',
+    textOrType: string,
+    payloadOrType?: any,
     eventId?: string,
     overrideToken?: string,
     overrideChatId?: string,
     skipEnabledCheck = false
   ): Promise<{ success: boolean; message: string; rawError?: string }> {
+    let text = '';
+    let type: TelegramLog['type'] = 'EVENT_NEW';
+    const schoolName = this.data.systemSettings?.schoolName || 'โรงเรียนตัวอย่างวิทยา';
+
+    // Flexible parameter detection
+    if (typeof payloadOrType === 'object' && payloadOrType !== null) {
+      // Called as dispatchTelegram(type, payload, eventId)
+      type = textOrType as any;
+      const payload = payloadOrType;
+
+      if (type === 'EVENT_REMINDER' && payload.event) {
+        text = formatAdvanceEventReminderMessage(
+          payload.event,
+          payload.timingLabel || 'เตือนล่วงหน้า',
+          schoolName
+        );
+      } else if (type === 'ADVANCE_DUTY_REMINDER' && payload.schedule && payload.group) {
+        text = formatAdvanceDutyReminderMessage(payload.schedule, payload.group, schoolName);
+      } else if (type === 'DUTY_REMINDER' && payload.schedule && payload.group) {
+        text = formatDutyGroupReminderMessage(payload.schedule, payload.group, schoolName);
+      } else if (type === 'DAILY_SUMMARY') {
+        const todayStr = payload.dateStr || new Date().toISOString().split('T')[0];
+        const todaySched = (this.data.dutySchedules || []).find((s) => s.date === todayStr);
+        const todayGrp = todaySched ? (this.data.dutyGroups || []).find((g) => g.id === todaySched.groupId) || null : null;
+        const todayMMDD = todayStr.substring(5);
+        const todayBirthdays = (this.data.birthdays || []).filter((b) => b.birthDate && b.birthDate.endsWith(todayMMDD));
+        text = formatDailySummaryMessage(this.data.events, todaySched || null, todayGrp || null, todayBirthdays, schoolName, todayStr);
+      } else if (type === 'BIRTHDAY' && payload.birthday) {
+        text = formatBirthdayGreetingMessage(payload.birthday, schoolName);
+      } else if (type === 'EVENT_APPROVED' && payload.event) {
+        text = formatEventMessage(payload.event, schoolName, '✅ <b>อนุมัติกิจกรรมใหม่เรียบร้อยแล้ว</b>');
+      } else if (type === 'EVENT_CHANGED' && payload.newEvent && payload.oldEvent) {
+        text = formatEventChangeMessage(payload.oldEvent, payload.newEvent, schoolName);
+      } else if (type === 'ANNOUNCEMENT' && payload.announcement) {
+        text = formatAnnouncementMessage(payload.announcement, schoolName);
+      } else {
+        text = payload.text || payload.content || String(payload);
+      }
+    } else {
+      // Called as dispatchTelegram(text, type, eventId, overrideToken, overrideChatId, skipEnabledCheck)
+      text = textOrType;
+      type = (payloadOrType as any) || 'EVENT_NEW';
+    }
+
     const settings = this.data.telegramSettings;
     const isEnabled = settings.enabled || skipEnabledCheck || !!overrideToken;
     if (!isEnabled && !overrideToken) {
@@ -1340,6 +1390,35 @@ class LocalStore {
         lastRes = await this.dispatchTelegram(msg, 'BIRTHDAY', undefined, undefined, undefined, true);
       }
       return lastRes;
+    }
+    if (pathPart === '/settings/telegram/broadcast-duty-advance') {
+      const tmr = new Date();
+      tmr.setDate(tmr.getDate() + 1);
+      const tmrStr = tmr.toISOString().split('T')[0];
+      const tmrSched = (this.data.dutySchedules || []).find((s) => s.date === tmrStr);
+      if (!tmrSched) {
+        return { success: false, message: `ไม่พบตารางเวรสำหรับวันพรุ่งนี้ (${formatThaiDate(tmrStr, { format: 'short' })})` };
+      }
+      const grp = (this.data.dutyGroups || []).find((g) => g.id === tmrSched.groupId);
+      if (!grp) {
+        return { success: false, message: 'ไม่พบชุดเวรสำหรับวันพรุ่งนี้' };
+      }
+      const msg = formatAdvanceDutyReminderMessage(tmrSched, grp, this.data.systemSettings.schoolName);
+      const res = await this.dispatchTelegram(msg, 'ADVANCE_DUTY_REMINDER', undefined, undefined, undefined, true);
+      return res;
+    }
+    if (pathPart === '/settings/telegram/check-scheduled' || pathPart === '/scheduler/check' || pathPart === '/scheduler/cron') {
+      const body = typeof options.body === 'string' ? JSON.parse(options.body || '{}') : options.body || {};
+      const forceAll = !!body.forceAllDue;
+      // Trigger check
+      const { checkAndDispatchScheduledNotifications } = await import('../utils/schedulerEngine');
+      const res = await checkAndDispatchScheduledNotifications(forceAll);
+      return res;
+    }
+    if (pathPart === '/settings/telegram/scheduled-jobs') {
+      const { getUpcomingScheduledJobs } = await import('../utils/schedulerEngine');
+      const jobs = getUpcomingScheduledJobs();
+      return { jobs, total: jobs.length };
     }
     if (pathPart === '/settings/reset-default') {
       const def = this.resetToDefault();

@@ -208,9 +208,31 @@ export interface TelegramSettings {
   notifyOnChange: boolean;
   dailySummary?: boolean;
   notifyDailySummary?: boolean;
-  dailySummaryTime: string;
+  dailySummaryTime: string; // e.g. "07:00"
+  dutyReminderTime?: string; // e.g. "06:30" or "07:00"
+  advanceDutyReminder?: boolean; // แจ้งเตือนครูเวรล่วงหน้า 1 วัน
+  advanceDutyReminderTime?: string; // e.g. "17:00"
+  birthdayGreetingTime?: string; // e.g. "07:00"
+  advanceNotificationTime?: string; // เวลาส่งแจ้งเตือนกิจกรรมล่วงหน้าของแต่ละวัน e.g. "07:00"
   notifyAdvanceDays?: number[];
   defaultNotifyTimes?: string[];
+  lastDailySummaryDate?: string;
+  lastDutyReminderDate?: string;
+  lastAdvanceDutyReminderDate?: string;
+  sentAdvanceReminders?: { [reminderKey: string]: string };
+}
+
+export interface ScheduledJobItem {
+  id: string;
+  title: string;
+  categoryName?: string;
+  type: 'EVENT_ADVANCE' | 'DAILY_SUMMARY' | 'DUTY_TODAY' | 'DUTY_ADVANCE' | 'BIRTHDAY';
+  targetDate: string;
+  targetTime: string;
+  timingLabel: string;
+  scheduledDateTime: string;
+  status: 'PENDING' | 'SENT' | 'DUE_NOW';
+  details?: string;
 }
 
 export interface NotificationLog {

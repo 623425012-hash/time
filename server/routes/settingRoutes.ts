@@ -79,6 +79,11 @@ settingRouter.put('/telegram', authenticateToken, requirePermission('telegram.ma
     dailySummaryTime,
     defaultNotifyTimes,
     notifyAdvanceDays,
+    dutyReminderTime,
+    advanceDutyReminder,
+    advanceDutyReminderTime,
+    birthdayGreetingTime,
+    advanceNotificationTime,
   } = req.body;
 
   const current = db.getData().telegramSettings;
@@ -101,6 +106,11 @@ settingRouter.put('/telegram', authenticateToken, requirePermission('telegram.ma
   }
 
   if (dailySummaryTime !== undefined) current.dailySummaryTime = dailySummaryTime;
+  if (dutyReminderTime !== undefined) current.dutyReminderTime = dutyReminderTime;
+  if (advanceDutyReminder !== undefined) current.advanceDutyReminder = Boolean(advanceDutyReminder);
+  if (advanceDutyReminderTime !== undefined) current.advanceDutyReminderTime = advanceDutyReminderTime;
+  if (birthdayGreetingTime !== undefined) current.birthdayGreetingTime = birthdayGreetingTime;
+  if (advanceNotificationTime !== undefined) current.advanceNotificationTime = advanceNotificationTime;
   if (defaultNotifyTimes !== undefined) current.defaultNotifyTimes = defaultNotifyTimes;
   if (notifyAdvanceDays !== undefined) current.defaultNotifyTimes = notifyAdvanceDays.map(String);
 
@@ -117,6 +127,46 @@ settingRouter.put('/telegram', authenticateToken, requirePermission('telegram.ma
     telegram: responsePayload,
     telegramSettings: responsePayload,
   });
+});
+
+// Check and trigger scheduled jobs immediately
+settingRouter.post('/telegram/check-scheduled', authenticateToken, requirePermission('telegram.manage'), async (req: AuthRequest, res: Response) => {
+  const { scheduler } = await import('../scheduler');
+  const forceAll = Boolean(req.body?.forceAllDue);
+  const result = await scheduler.checkJobs(forceAll);
+  logActivity(req.user, 'SEND_TELEGRAM', `สั่งตรวจหาและส่งการแจ้งเตือนตามกำหนดเวลา (${result.dispatchedCount} รายการ)`, req);
+  res.json({
+    success: true,
+    dispatchedCount: result.dispatchedCount,
+    dispatchedItems: result.details,
+    message: result.dispatchedCount > 0
+      ? `ส่งการแจ้งเตือนตามกำหนดเวลาสำเร็จ ${result.dispatchedCount} รายการ`
+      : 'ตรวจสอบแล้ว ไม่มีรายการที่ถึงกำหนดในรอบนี้',
+  });
+});
+
+// Broadcast Tomorrow's Duty Group (Advance Duty Reminder)
+settingRouter.post('/telegram/broadcast-duty-advance', authenticateToken, requirePermission('telegram.manage'), async (req: AuthRequest, res: Response) => {
+  const now = new Date();
+  now.setDate(now.getDate() + 1);
+  const tmrStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+  const schedule = (db.getData().dutySchedules || []).find((s) => s.date === tmrStr);
+  if (schedule) {
+    const group = (db.getData().dutyGroups || []).find((g) => g.id === schedule.groupId);
+    if (group) {
+      const result = await TelegramService.sendAdvanceDutyReminder(schedule, group);
+      if (result.success) {
+        logActivity(req.user, 'SEND_TELEGRAM', `ส่งแจ้งเตือนครูเวรวันพรุ่งนี้ล่วงหน้า (${group.name}) ไปยัง Telegram`, req);
+        res.json({ success: true, message: `ส่งแจ้งเตือนครูเวรวันพรุ่งนี้ "${group.name}" สำเร็จ`, result });
+        return;
+      }
+      res.status(400).json({ success: false, error: result.message, message: result.message });
+      return;
+    }
+  }
+
+  res.status(404).json({ success: false, error: `ไม่พบตารางครูเวรสำหรับวันพรุ่งนี้ (${tmrStr})` });
 });
 
 // Test Telegram Bot Connection (accepts optional live botToken and chatId from body)

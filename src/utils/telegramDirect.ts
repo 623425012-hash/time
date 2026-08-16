@@ -130,6 +130,86 @@ export function formatEventChangeMessage(
   return message;
 }
 
+export function formatAdvanceEventReminderMessage(
+  event: SchoolEvent,
+  timingLabel: string,
+  schoolName = 'โรงเรียนตัวอย่างวิทยา'
+): string {
+  const priorityLabel =
+    event.priority === 'URGENT' ? '🔴 ด่วนที่สุด' : event.priority === 'IMPORTANT' ? '🟠 สำคัญ' : '🔵 ทั่วไป';
+  const dateText =
+    event.startDate === event.endDate
+      ? formatThaiDate(event.startDate, { format: 'medium' })
+      : formatThaiDateRange(event.startDate, event.endDate);
+  const timeText = event.isAllDay ? 'ตลอดทั้งวัน' : `${event.startTime || '08:30'} - ${event.endTime || '16:30'} น.`;
+
+  let message = `⏰ <b>แจ้งเตือนกิจกรรมล่วงหน้า: ${escapeHtml(timingLabel)}</b>\n`;
+  message += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+  message += `📌 <b>กิจกรรม</b>: <b>${escapeHtml(event.title)}</b>\n`;
+  message += `📅 <b>วันที่จัดกิจกรรม</b>: ${dateText}\n`;
+  message += `⏰ <b>เวลา</b>: ${timeText}\n`;
+  message += `📍 <b>สถานที่</b>: ${escapeHtml(event.location || '-')}\n`;
+  message += `👤 <b>ผู้รับผิดชอบ</b>: ${escapeHtml(event.coordinator || '-')} (${escapeHtml(event.department || '-')})\n`;
+  message += `👥 <b>กลุ่มเป้าหมาย</b>: ${escapeHtml(event.targetGroup || '-')}\n`;
+  message += `⚠️ <b>ระดับความสำคัญ</b>: ${priorityLabel}\n`;
+  if (event.description) {
+    message += `\n📝 <b>รายละเอียด / กำหนดการ</b>:\n${escapeHtml(event.description)}\n`;
+  }
+  if (event.attachments && event.attachments.length > 0) {
+    message += `📎 <b>เอกสารแนบ</b>: ${event.attachments.length} ไฟล์\n`;
+  }
+  message += `\n━━━━━━━━━━━━━━━━━━━━\n`;
+  message += `🏫 <i>${escapeHtml(schoolName)}</i>`;
+
+  return message;
+}
+
+export function formatAdvanceDutyReminderMessage(
+  schedule: DutySchedule,
+  group: DutyGroup,
+  schoolName = 'โรงเรียนตัวอย่างวิทยา'
+): string {
+  const fullDate = formatThaiDate(schedule.date, { format: 'medium' });
+  const dayName = formatThaiDayOfWeek(schedule.date);
+
+  let message = `🛡️ <b>แจ้งเตือนเตรียมความพร้อมครูเวร (วันพรุ่งนี้)</b>\n`;
+  message += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+  message += `📅 <b>วันที่ปฏิบัติหน้าที่</b>: ${dayName}ที่ ${fullDate}\n`;
+  message += `🛡️ <b>ชุดเวรที่ปฏิบัติหน้าที่</b>: <b>${escapeHtml(group.name)}</b>\n\n`;
+
+  const members = schedule.membersSnapshot || group.members;
+  if (members && members.length > 0) {
+    message += `👥 <b>รายชื่อสมาชิกผู้ปฏิบัติหน้าที่</b>:\n`;
+    members.forEach((m, idx) => {
+      const isLeader = m.roleInGroup === 'LEADER';
+      const roleLabel = isLeader ? ' 👑 (หัวหน้าชุด)' : '';
+      const deptLabel = m.department ? ` - ${m.department}` : '';
+      const phoneLabel = m.phone ? ` 📞 ${m.phone}` : '';
+      message += `${idx + 1}. <b>${escapeHtml(m.name)}</b>${roleLabel}${escapeHtml(deptLabel)}${phoneLabel}\n`;
+    });
+    message += `\n`;
+  }
+
+  const responsibilities = schedule.customResponsibilities || group.responsibilities;
+  if (responsibilities && responsibilities.length > 0) {
+    message += `📋 <b>หน้าที่ความรับผิดชอบ</b>:\n`;
+    responsibilities.forEach((r) => {
+      message += `• ${escapeHtml(r)}\n`;
+    });
+    message += `\n`;
+  }
+
+  if (schedule.notes) {
+    message += `📝 <b>หมายเหตุเพิ่มเติม</b>: ${escapeHtml(schedule.notes)}\n\n`;
+  }
+
+  message += `ขอให้คุณครูและบุคลากรในชุดเวรเตรียมความพร้อมสำหรับการปฏิบัติหน้าที่ในวันพรุ่งนี้ครับ\n`;
+  message += `\n━━━━━━━━━━━━━━━━━━━━\n`;
+  message += `🏫 <i>${escapeHtml(schoolName)}</i>`;
+
+  return message;
+}
+
 export function formatDutyGroupReminderMessage(
   schedule: DutySchedule,
   group: DutyGroup,

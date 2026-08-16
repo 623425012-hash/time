@@ -19,8 +19,12 @@ import {
   Trash2,
   Eye,
   Info,
+  CalendarCheck,
+  Play,
+  ListOrdered,
+  BellRing,
 } from 'lucide-react';
-import { TelegramSettings, TelegramLog } from '../../types';
+import { TelegramSettings, TelegramLog, ScheduledJobItem } from '../../types';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -39,15 +43,24 @@ export const TelegramView: React.FC = () => {
     notifyOnChange: true,
     dailySummary: true,
     dailySummaryTime: '07:00',
+    advanceNotificationTime: '07:00',
+    dutyReminderTime: '06:30',
+    advanceDutyReminder: true,
+    advanceDutyReminderTime: '17:00',
+    birthdayGreetingTime: '07:00',
     notifyAdvanceDays: [1],
+    defaultNotifyTimes: ['1_DAY_BEFORE', 'SAME_DAY_MORNING'],
   });
 
   const [logs, setLogs] = useState<TelegramLog[]>([]);
+  const [scheduledJobs, setScheduledJobs] = useState<ScheduledJobItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [checkingScheduled, setCheckingScheduled] = useState(false);
   const [broadcastingDaily, setBroadcastingDaily] = useState(false);
   const [broadcastingDuty, setBroadcastingDuty] = useState(false);
+  const [broadcastingAdvanceDuty, setBroadcastingAdvanceDuty] = useState(false);
   const [broadcastingBirthday, setBroadcastingBirthday] = useState(false);
   const [clearingLogs, setClearingLogs] = useState(false);
   const [selectedLog, setSelectedLog] = useState<TelegramLog | null>(null);
@@ -55,17 +68,24 @@ export const TelegramView: React.FC = () => {
   const fetchSettingsAndLogs = async () => {
     setLoading(true);
     try {
-      const [settingsRes, logsRes] = await Promise.all([
+      const [settingsRes, logsRes, jobsRes] = await Promise.all([
         api.get<{ telegram: TelegramSettings }>('/settings/telegram'),
         api.get<{ logs: TelegramLog[] }>('/settings/telegram/logs'),
+        api.get<{ jobs: ScheduledJobItem[] }>('/settings/telegram/scheduled-jobs').catch(() => ({ jobs: [] })),
       ]);
       if (settingsRes.telegram) {
         setSettings({
           ...settingsRes.telegram,
           dailySummary: settingsRes.telegram.dailySummary ?? settingsRes.telegram.notifyDailySummary ?? true,
+          advanceNotificationTime: settingsRes.telegram.advanceNotificationTime || '07:00',
+          dutyReminderTime: settingsRes.telegram.dutyReminderTime || '06:30',
+          advanceDutyReminder: settingsRes.telegram.advanceDutyReminder ?? true,
+          advanceDutyReminderTime: settingsRes.telegram.advanceDutyReminderTime || '17:00',
+          birthdayGreetingTime: settingsRes.telegram.birthdayGreetingTime || '07:00',
         });
       }
       setLogs(logsRes.logs || []);
+      setScheduledJobs(jobsRes.jobs || []);
     } catch (e) {
       console.error('Error fetching telegram info:', e);
     } finally {
@@ -86,7 +106,7 @@ export const TelegramView: React.FC = () => {
         notifyDailySummary: settings.dailySummary,
       };
       await api.put('/settings/telegram', payload);
-      showToast('success', 'บันทึกการตั้งค่าสำเร็จ', 'อัปเดตการตั้งค่า Telegram Bot เรียบร้อยแล้ว');
+      showToast('success', 'บันทึกการตั้งค่าสำเร็จ', 'อัปเดตการตั้งค่า Telegram Bot และเวลาแจ้งเตือนล่วงหน้าเรียบร้อยแล้ว');
       fetchSettingsAndLogs();
     } catch (err: any) {
       showToast('error', 'บันทึกไม่สำเร็จ', err?.message || 'เกิดข้อผิดพลาดในการบันทึก');
@@ -112,7 +132,6 @@ export const TelegramView: React.FC = () => {
       });
 
       if (res && res.success) {
-        // If it was local client-side simulated response without a real backend on Vercel static, also trigger real direct Telegram API
         if (settings.botToken && !settings.botToken.includes('...')) {
           const testMsg = `🔔 <b>ทดสอบการเชื่อมต่อระบบแจ้งเตือน Telegram</b>\n━━━━━━━━━━━━━━━━━━━━\n✅ ทดสอบส่งข้อความสำเร็จ! ระบบสามารถเชื่อมต่อและแจ้งเตือนเข้ากลุ่มได้ตามปกติ\n📅 วันที่และเวลา: ${new Date().toLocaleString('th-TH')}\n🏫 ระบบปฏิทินกิจกรรมโรงเรียน`;
           const directRes = await sendTelegramDirect(settings.botToken, settings.chatId, testMsg);
@@ -129,7 +148,6 @@ export const TelegramView: React.FC = () => {
       }
       fetchSettingsAndLogs();
     } catch (err: any) {
-      // Fallback directly via Telegram API from client side if backend route fails
       if (settings.botToken && !settings.botToken.includes('...')) {
         const testMsg = `🔔 <b>ทดสอบการเชื่อมต่อระบบแจ้งเตือน Telegram (Direct)</b>\n━━━━━━━━━━━━━━━━━━━━\n✅ ทดสอบส่งข้อความสำเร็จ! ระบบสามารถเชื่อมต่อและแจ้งเตือนเข้ากลุ่มได้ตามปกติ\n📅 วันที่และเวลา: ${new Date().toLocaleString('th-TH')}\n🏫 ระบบปฏิทินกิจกรรมโรงเรียน`;
         const directRes = await sendTelegramDirect(settings.botToken, settings.chatId, testMsg);
@@ -143,6 +161,30 @@ export const TelegramView: React.FC = () => {
       fetchSettingsAndLogs();
     } finally {
       setTesting(false);
+    }
+  };
+
+  const handleCheckScheduledNow = async (forceAllDue = false) => {
+    setCheckingScheduled(true);
+    try {
+      const res = await api.post<{ success: boolean; dispatchedCount: number; dispatchedItems?: string[]; message?: string }>(
+        '/scheduler/check',
+        { forceAllDue }
+      );
+      if (res && res.dispatchedCount > 0) {
+        showToast(
+          'success',
+          `ส่งการแจ้งเตือนสำเร็จ ${res.dispatchedCount} รายการ`,
+          res.dispatchedItems?.join(', ') || res.message || 'ส่งข้อความเรียบร้อย'
+        );
+      } else {
+        showToast('info', 'ตรวจสอบกำหนดเวลาเรียบร้อย', 'ไม่มีรายการที่ถึงเวลาส่งแจ้งเตือนในขณะนี้ (หรือได้ส่งไปแล้ว)');
+      }
+      fetchSettingsAndLogs();
+    } catch (err: any) {
+      showToast('error', 'ตรวจสอบล้มเหลว', err?.message || 'ไม่สามารถสั่งรันระบบแจ้งเตือนได้');
+    } finally {
+      setCheckingScheduled(false);
     }
   };
 
@@ -169,6 +211,19 @@ export const TelegramView: React.FC = () => {
       showToast('error', 'ส่งแจ้งเตือนเวรล้มเหลว', err?.message || 'ไม่พบข้อมูลตารางเวรสำหรับวันนี้');
     } finally {
       setBroadcastingDuty(false);
+    }
+  };
+
+  const handleBroadcastDutyAdvance = async () => {
+    setBroadcastingAdvanceDuty(true);
+    try {
+      const res = await api.post<{ success: boolean; message?: string }>('/settings/telegram/broadcast-duty-advance');
+      showToast('success', 'ส่งแจ้งเตือนครูเวรวันพรุ่งนี้สำเร็จ', res.message || 'ส่งแจ้งเตือนเตรียมความพร้อมครูเวรวันพรุ่งนี้แล้ว');
+      fetchSettingsAndLogs();
+    } catch (err: any) {
+      showToast('error', 'ส่งแจ้งเตือนล้มเหลว', err?.message || 'ไม่พบข้อมูลตารางเวรสำหรับวันพรุ่งนี้');
+    } finally {
+      setBroadcastingAdvanceDuty(false);
     }
   };
 
@@ -230,13 +285,23 @@ export const TelegramView: React.FC = () => {
               )}
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              ส่งแจ้งเตือนกิจกรรมที่ได้รับอนุมัติ สรุปประจำวันตอนเช้า ตารางชุดครูเวร และคำอวยพรวันเกิดเข้ากลุ่ม Telegram
+              ส่งแจ้งเตือนกิจกรรมล่วงหน้าตามวันเวลาที่กำหนด สรุปประจำวันตอนเช้า ตารางชุดครูเวร และคำอวยพรวันเกิด
             </p>
           </div>
         </div>
 
-        {/* Quick broadcast toolbar */}
+        {/* Quick broadcast & manual trigger toolbar */}
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => handleCheckScheduledNow(false)}
+            disabled={checkingScheduled || !isConfigured}
+            title="ตรวจหาและส่งการแจ้งเตือนที่ถึงกำหนดเวลาทันที"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-900 text-xs font-bold shadow-xs transition-all disabled:opacity-50"
+          >
+            <Play className={`w-3.5 h-3.5 fill-current ${checkingScheduled ? 'animate-spin' : ''}`} />
+            <span>{checkingScheduled ? 'กำลังตรวจหา...' : 'รันระบบเตือนล่วงหน้า'}</span>
+          </button>
+
           <button
             onClick={handleBroadcastDailySummary}
             disabled={broadcastingDaily || !isConfigured}
@@ -258,6 +323,16 @@ export const TelegramView: React.FC = () => {
           </button>
 
           <button
+            onClick={handleBroadcastDutyAdvance}
+            disabled={broadcastingAdvanceDuty || !isConfigured}
+            title="ส่งแจ้งเตือนชุดครูเวรวันพรุ่งนี้ล่วงหน้า"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-all disabled:opacity-50"
+          >
+            <CalendarCheck className={`w-3.5 h-3.5 ${broadcastingAdvanceDuty ? 'animate-spin' : ''}`} />
+            <span>{broadcastingAdvanceDuty ? 'กำลังส่ง...' : 'เตือนเวรวันพรุ่งนี้'}</span>
+          </button>
+
+          <button
             onClick={handleBroadcastBirthdaysToday}
             disabled={broadcastingBirthday || !isConfigured}
             title="ส่งคำอวยพรวันเกิดบุคลากรที่มีวันเกิดวันนี้"
@@ -269,16 +344,95 @@ export const TelegramView: React.FC = () => {
         </div>
       </div>
 
+      {/* Scheduled Jobs Overview Panel */}
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <BellRing className="w-5 h-5 text-amber-500" />
+            <div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                ตารางคิวการแจ้งเตือนล่วงหน้าตามเวลาจริง ({scheduledJobs.length} รายการ)
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                ระบบจะตรวจสอบและส่งแจ้งเตือน Telegram ตามวันและเวลาที่ระบุโดยอัตโนมัติ
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={fetchSettingsAndLogs}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <span>อัปเดตคิว</span>
+          </button>
+        </div>
+
+        {scheduledJobs.length === 0 ? (
+          <div className="p-6 text-center text-xs text-slate-400 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
+            ยังไม่มีกิจกรรมหรือชุดเวรที่เปิดตั้งค่าแจ้งเตือนล่วงหน้า
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {scheduledJobs.slice(0, 9).map((job) => (
+              <div
+                key={job.id}
+                className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 flex flex-col justify-between gap-2"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                      {job.timingLabel}
+                    </span>
+                    {job.isSent ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> ส่งแล้ว
+                      </span>
+                    ) : job.isDue ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400 font-bold animate-pulse">
+                        <Clock className="w-3.5 h-3.5" /> ถึงเวลาส่งแล้ว
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 font-medium">
+                        <Clock className="w-3.5 h-3.5" /> รอถึงเวลา
+                      </span>
+                    )}
+                  </div>
+                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 line-clamp-1">
+                    {job.title}
+                  </h4>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    วันจัดกิจกรรม: {job.targetDate}
+                  </p>
+                </div>
+                <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400">
+                  <span>เวลาที่จะแจ้งเตือน:</span>
+                  <span className="font-bold text-slate-900 dark:text-slate-100">
+                    {new Date(job.triggerDateTime).toLocaleString('th-TH', {
+                      day: 'numeric',
+                      month: 'short',
+                      year: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Settings Form (Left 2 cols) */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs">
             <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
               <Settings2 className="w-5 h-5 text-blue-600" />
-              <span>การตั้งค่าเชื่อมต่อบอทและการส่งข้อความ</span>
+              <span>การตั้งค่าเชื่อมต่อบอทและการส่งข้อความตามเวลา</span>
             </h3>
 
-            <form onSubmit={handleSaveSettings} className="space-y-4">
+            <form onSubmit={handleSaveSettings} className="space-y-5">
               {/* Bot Enabled Switch */}
               <div className="p-4 rounded-2xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/60 flex items-center justify-between">
                 <div>
@@ -287,7 +441,7 @@ export const TelegramView: React.FC = () => {
                     เปิดใช้งานระบบแจ้งเตือน Telegram
                   </p>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                    เมื่อเปิดใช้งาน ระบบจะส่งข้อความแจ้งเตือนอัตโนมัติตามเงื่อนไขที่เลือกด้านล่าง
+                    เมื่อเปิดใช้งาน ระบบจะส่งข้อความแจ้งเตือนอัตโนมัติตามเงื่อนไขและเวลาที่เลือกด้านล่าง
                   </p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
@@ -315,7 +469,7 @@ export const TelegramView: React.FC = () => {
                 />
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1">
                   <Info className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                  ขอ Token ได้จากบอท <strong>@BotFather</strong> โดยพิมพ์คำสั่ง <code>/newbot</code>
+                  ขอ Token ได้จากบอท <strong>@BotFather</strong> บน Telegram โดยพิมพ์คำสั่ง <code>/newbot</code>
                 </p>
               </div>
 
@@ -337,10 +491,76 @@ export const TelegramView: React.FC = () => {
                 </p>
               </div>
 
+              {/* Timings Configuration Section */}
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-4">
+                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <Clock className="w-4 h-4 text-blue-500" />
+                  การตั้งค่าเวลาสำหรับการแจ้งเตือนแต่ละประเภท
+                </h4>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  {/* Advance event reminder time */}
+                  <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200">เวลาเตือนกิจกรรมล่วงหน้ารายวัน</p>
+                      <p className="text-[11px] text-slate-500">สำหรับตัวเลือก 7, 3, 2, 1 วัน และเช้าวันจัดงาน</p>
+                    </div>
+                    <input
+                      type="time"
+                      value={settings.advanceNotificationTime || '07:00'}
+                      onChange={(e) => setSettings({ ...settings, advanceNotificationTime: e.target.value })}
+                      className="px-2.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs font-bold"
+                    />
+                  </div>
+
+                  {/* Daily Summary Time */}
+                  <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200">เวลาส่งสรุปประจำวันทุกเช้า</p>
+                      <p className="text-[11px] text-slate-500">สรุปภาพรวมกิจกรรมทั้งหมดในแต่ละวัน</p>
+                    </div>
+                    <input
+                      type="time"
+                      value={settings.dailySummaryTime || '07:00'}
+                      onChange={(e) => setSettings({ ...settings, dailySummaryTime: e.target.value })}
+                      className="px-2.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs font-bold"
+                    />
+                  </div>
+
+                  {/* Duty Reminder Time (Same-Day) */}
+                  <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200">เวลาเตือนครูเวรประจำวัน</p>
+                      <p className="text-[11px] text-slate-500">แจ้งเตือนชุดเวรในตอนเช้าของวันที่ปฏิบัติหน้าที่</p>
+                    </div>
+                    <input
+                      type="time"
+                      value={settings.dutyReminderTime || '06:30'}
+                      onChange={(e) => setSettings({ ...settings, dutyReminderTime: e.target.value })}
+                      className="px-2.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs font-bold"
+                    />
+                  </div>
+
+                  {/* Advance Duty Reminder Time (Evening before) */}
+                  <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200">เวลาเตือนครูเวรล่วงหน้า (ตอนเย็น)</p>
+                      <p className="text-[11px] text-slate-500">เตือนชุดเวรของวันพรุ่งนี้ล่วงหน้าตอนเย็น</p>
+                    </div>
+                    <input
+                      type="time"
+                      value={settings.advanceDutyReminderTime || '17:00'}
+                      onChange={(e) => setSettings({ ...settings, advanceDutyReminderTime: e.target.value })}
+                      className="px-2.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs font-bold"
+                    />
+                  </div>
+                </div>
+              </div>
+
               {/* Trigger Toggles */}
               <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
                 <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  เงื่อนไขการส่งข้อความอัตโนมัติ
+                  เปิด/ปิด ตัวเลือกการแจ้งเตือนอัตโนมัติ
                 </h4>
 
                 <div className="space-y-2.5">
@@ -395,27 +615,21 @@ export const TelegramView: React.FC = () => {
                       <p className="text-[11px] text-slate-500 dark:text-slate-400">สรุปงานวันนี้ พรุ่งนี้ ตารางเวร และอวยพรวันเกิดบุคลากร</p>
                     </div>
                   </label>
+
+                  <label className="flex items-start gap-2.5 cursor-pointer text-xs font-medium text-slate-700 dark:text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={settings.advanceDutyReminder !== false}
+                      onChange={(e) => setSettings({ ...settings, advanceDutyReminder: e.target.checked })}
+                      className="mt-0.5 w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+                    />
+                    <div>
+                      <p className="font-bold text-slate-900 dark:text-slate-100">ส่งแจ้งเตือนครูเวรวันพรุ่งนี้ล่วงหน้าตอนเย็น</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">แจ้งรายชื่อและหน้าที่ของชุดเวรให้เตรียมตัวล่วงหน้า</p>
+                    </div>
+                  </label>
                 </div>
               </div>
-
-              {/* Daily Summary Time */}
-              {settings.dailySummary && (
-                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-blue-600" />
-                    <div>
-                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200">เวลาส่งสรุปประจำวันทุกเช้า</p>
-                      <p className="text-[11px] text-slate-500">ระบบจะส่งข้อความอัตโนมัติตามเวลานี้</p>
-                    </div>
-                  </div>
-                  <input
-                    type="time"
-                    value={settings.dailySummaryTime || '07:00'}
-                    onChange={(e) => setSettings({ ...settings, dailySummaryTime: e.target.value })}
-                    className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs font-bold"
-                  />
-                </div>
-              )}
 
               {/* Action Buttons */}
               <div className="pt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 dark:border-slate-800">
@@ -465,10 +679,10 @@ export const TelegramView: React.FC = () => {
           <div className="bg-emerald-50/60 dark:bg-emerald-950/30 rounded-3xl p-5 border border-emerald-100 dark:border-emerald-900/60 space-y-3">
             <h4 className="text-xs font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-2">
               <Zap className="w-4 h-4 text-emerald-600" />
-              <span>การใช้งานบน Vercel / Cloud</span>
+              <span>การทำงานบน Vercel และ Serverless</span>
             </h4>
             <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              ระบบมี <code>vercel.json</code> และรองรับ <strong>Direct Telegram Dispatch</strong> ส่งแจ้งเตือนได้ทันทีโดยตรงผ่านบอท แม้จะ Deploy บน Vercel หรือเซิร์ฟเวอร์ใดก็ตาม
+              ระบบรองรับการทำงานทั้งแบบ <strong>Direct Telegram API</strong> จากฝั่งเบราว์เซอร์ และ <strong>Vercel Cron Job</strong> เรียก <code>/api/scheduler/check</code> โดยไม่ต้องพึ่ง Background Process ค้างไว้ ทำให้การแจ้งเตือนตามวันและเวลาทำงานได้อย่างเสถียร 100%
             </p>
           </div>
 
@@ -480,21 +694,6 @@ export const TelegramView: React.FC = () => {
             <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
               เชิญบอท <strong>@RawDataBot</strong> หรือ <strong>@userinfobot</strong> เข้ากลุ่มชั่วคราว บอทจะพิมพ์ข้อความสรุป JSON ออกมา ให้ดูค่าในช่อง <code>{`"chat": {"id": -100xxxxxxxxxx}`}</code> แล้วนำตัวเลขนั้นมาใส่
             </p>
-          </div>
-
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
-            <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-emerald-500" />
-              <span>ตัวอย่างข้อความแจ้งเตือน</span>
-            </h4>
-            <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 font-mono text-[11px] text-slate-700 dark:text-slate-300 space-y-1">
-              <p className="font-bold text-blue-600">🔔 แจ้งเตือนกิจกรรมโรงเรียน</p>
-              <p>📌 กิจกรรมวันไหว้ครู ประจำปีการศึกษา 2569</p>
-              <p>📅 วันที่: 12 มิ.ย. 2569</p>
-              <p>⏰ เวลา: 08:30 - 11:30 น.</p>
-              <p>📍 สถานที่: หอประชุมใหญ่</p>
-              <p>👤 ผู้รับผิดชอบ: ครูสมศักดิ์</p>
-            </div>
           </div>
         </div>
       </div>
@@ -657,3 +856,4 @@ export const TelegramView: React.FC = () => {
     </div>
   );
 };
+
