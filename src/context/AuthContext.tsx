@@ -17,10 +17,24 @@ interface AuthContextType {
   hasPermission: (permission: UserPermission) => boolean;
 }
 
+export const DEFAULT_VIEWER_USER: User = {
+  id: 'usr-viewer-1',
+  name: 'กิตติศักดิ์',
+  surname: 'มุ่งมั่น',
+  username: 'viewer',
+  email: 'viewer@school.ac.th',
+  department: 'ผู้ปกครอง / นักเรียน / สาธารณะ',
+  position: 'ผู้เยี่ยมชมระบบ (Viewer)',
+  role: 'VIEWER',
+  permissions: ['events.view', 'reports.view'],
+  status: 'ACTIVE',
+  createdAt: '2026-08-01T00:00:00Z',
+};
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(DEFAULT_VIEWER_USER);
   const [token, setToken] = useState<string | null>(getAuthToken());
   const [loading, setLoading] = useState<boolean>(true);
   const { showToast } = useToast();
@@ -28,7 +42,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const fetchCurrentUser = async () => {
     try {
       if (!getAuthToken()) {
-        setUser(null);
+        setUser(DEFAULT_VIEWER_USER);
         setLoading(false);
         return;
       }
@@ -37,7 +51,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {
       removeAuthToken();
       setToken(null);
-      setUser(null);
+      setUser(DEFAULT_VIEWER_USER);
     } finally {
       setLoading(false);
     }
@@ -102,8 +116,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       removeAuthToken();
       setToken(null);
-      setUser(null);
-      showToast('info', 'ออกจากระบบเรียบร้อยแล้ว');
+      setUser(DEFAULT_VIEWER_USER);
+      showToast('info', 'ออกจากระบบเรียบร้อยแล้ว (กลับสู่บทบาท Viewer)');
     }
   };
 
@@ -115,7 +129,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const isAdmin = user?.role === 'ADMIN';
   const isStaff = user?.role === 'STAFF';
-  const isViewer = user?.role === 'VIEWER';
+  const isViewer = !user || user.role === 'VIEWER';
 
   const hasPermission = (permission: UserPermission): boolean => {
     if (!user) return false;

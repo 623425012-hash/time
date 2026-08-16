@@ -43,10 +43,10 @@ const COLOR_PRESETS = [
 ];
 
 export const DutyView: React.FC = () => {
-  const { user, isAdmin, hasPermission } = useAuth();
+  const { user, isAdmin, isViewer, hasPermission } = useAuth();
   const { showToast, confirm } = useToast();
 
-  const canManage = isAdmin || hasPermission('duties.manage');
+  const canManage = !isViewer && (isAdmin || hasPermission('duties.manage'));
 
   const [activeTab, setActiveTab] = useState<'schedule' | 'groups'>('schedule');
   const [loading, setLoading] = useState(false);
@@ -693,23 +693,23 @@ export const DutyView: React.FC = () => {
                     </div>
 
                     {/* Bottom Actions */}
-                    <div className="p-3 bg-slate-50/80 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleSendTelegramForSchedule(schedule)}
-                        disabled={isSendingTelegram}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white text-xs font-semibold shadow-2xs transition-all"
-                        title="ส่งแจ้งเตือนเข้ากลุ่ม Telegram ทันที"
-                      >
-                        {isSendingTelegram ? (
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Send className="w-3.5 h-3.5" />
-                        )}
-                        <span>แจ้งเตือน Telegram</span>
-                      </button>
+                    {canManage && (
+                      <div className="p-3 bg-slate-50/80 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleSendTelegramForSchedule(schedule)}
+                          disabled={isSendingTelegram}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white text-xs font-semibold shadow-2xs transition-all"
+                          title="ส่งแจ้งเตือนเข้ากลุ่ม Telegram ทันที"
+                        >
+                          {isSendingTelegram ? (
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Send className="w-3.5 h-3.5" />
+                          )}
+                          <span>แจ้งเตือน Telegram</span>
+                        </button>
 
-                      {canManage && (
                         <div className="flex items-center gap-1">
                           <button
                             type="button"
@@ -728,8 +728,8 @@ export const DutyView: React.FC = () => {
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}

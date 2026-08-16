@@ -41,35 +41,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
   mobileOpen,
   setMobileOpen,
 }) => {
-  const { user, isAdmin, hasPermission } = useAuth();
+  const { user, isAdmin, isViewer, hasPermission } = useAuth();
   const { systemSettings } = useTheme();
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, badge: todayCount > 0 ? `${todayCount}` : undefined },
     { id: 'calendar', label: 'ปฏิทินกิจกรรม', icon: CalendarDays },
+    { id: 'duties', label: 'ตารางเวรปฏิบัติหน้าที่', icon: ClipboardCheck },
+    { id: 'announcements', label: 'ประกาศข่าวสาร', icon: Megaphone },
     {
       id: 'approvals',
       label: 'อนุมัติกิจกรรม',
       icon: CheckCircle,
       badge: pendingCount > 0 ? `${pendingCount} รออนุมัติ` : undefined,
-      hide: !isAdmin && !hasPermission('events.approve'),
+      hide: isViewer || (!isAdmin && !hasPermission('events.approve')),
     },
     {
       id: 'event-manager',
       label: 'จัดการรายงานกิจกรรม',
       icon: TableProperties,
-      hide: !isAdmin && !hasPermission('events.edit'),
+      hide: isViewer || (!isAdmin && !hasPermission('events.edit')),
     },
-    { id: 'announcements', label: 'ประกาศข่าวสาร', icon: Megaphone },
-    { id: 'holidays', label: 'วันหยุด / วันสำคัญ', icon: Flag },
-    { id: 'duties', label: 'ตารางเวรปฏิบัติหน้าที่', icon: ClipboardCheck },
-    { id: 'birthdays', label: 'วันเกิดบุคลากร', icon: Cake },
-    { id: 'telegram', label: 'การแจ้งเตือน Telegram', icon: BellRing },
-    { id: 'documents', label: 'เอกสารแนบ', icon: Paperclip },
-    { id: 'reports', label: 'รายงานและสถิติ', icon: BarChart3 },
-    { id: 'users', label: 'จัดการผู้ใช้งาน', icon: Users2, hide: !hasPermission('users.view') },
-    { id: 'settings', label: 'ตั้งค่าระบบ', icon: Settings, hide: !hasPermission('settings.manage') },
-    { id: 'logs', label: 'Activity Log', icon: ScrollText, hide: !hasPermission('logs.view') },
+    { id: 'holidays', label: 'วันหยุด / วันสำคัญ', icon: Flag, hide: isViewer },
+    { id: 'birthdays', label: 'วันเกิดบุคลากร', icon: Cake, hide: isViewer },
+    { id: 'telegram', label: 'การแจ้งเตือน Telegram', icon: BellRing, hide: isViewer || (!isAdmin && !hasPermission('telegram.manage')) },
+    { id: 'documents', label: 'เอกสารแนบ', icon: Paperclip, hide: isViewer },
+    { id: 'reports', label: 'รายงานและสถิติ', icon: BarChart3, hide: isViewer },
+    { id: 'users', label: 'จัดการผู้ใช้งาน', icon: Users2, hide: isViewer || !hasPermission('users.view') },
+    { id: 'settings', label: 'ตั้งค่าระบบ', icon: Settings, hide: isViewer || !hasPermission('settings.manage') },
+    { id: 'logs', label: 'Activity Log', icon: ScrollText, hide: isViewer || !hasPermission('logs.view') },
   ];
 
   return (

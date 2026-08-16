@@ -33,12 +33,22 @@ import {
 import { api } from './api/client';
 
 function AppContent() {
-  const { user, hasPermission } = useAuth();
+  const { user, isViewer, isAdmin, hasPermission } = useAuth();
   const { showToast } = useToast();
 
   // Navigation State
   const [activeTab, setActiveTab] = useState<ActiveNavTab>('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Allowed tabs for Viewer role
+  const VIEWER_ALLOWED_TABS: ActiveNavTab[] = ['dashboard', 'calendar', 'duties', 'announcements'];
+
+  // Guard against navigating to unauthorized tabs
+  useEffect(() => {
+    if (isViewer && !VIEWER_ALLOWED_TABS.includes(activeTab)) {
+      setActiveTab('dashboard');
+    }
+  }, [isViewer, activeTab]);
 
   // Modals State
   const [loginModalOpen, setLoginModalOpen] = useState(false);
@@ -187,14 +197,14 @@ function AppContent() {
               />
             )}
 
-            {activeTab === 'approvals' && (
+            {activeTab === 'approvals' && !isViewer && (isAdmin || hasPermission('events.approve')) && (
               <ApprovalView
                 onSelectEvent={handleSelectEvent}
                 onRefresh={refreshAll}
               />
             )}
 
-            {activeTab === 'event-manager' && (
+            {activeTab === 'event-manager' && !isViewer && (isAdmin || hasPermission('events.edit')) && (
               <EventManagerView
                 onSelectEvent={handleSelectEvent}
                 onEditEvent={handleEditEvent}
@@ -205,23 +215,23 @@ function AppContent() {
 
             {activeTab === 'announcements' && <AnnouncementView />}
 
-            {activeTab === 'holidays' && <HolidayView />}
+            {activeTab === 'holidays' && !isViewer && <HolidayView />}
 
             {activeTab === 'duties' && <DutyView />}
 
-            {activeTab === 'birthdays' && <BirthdayView />}
+            {activeTab === 'birthdays' && !isViewer && <BirthdayView />}
 
-            {activeTab === 'telegram' && <TelegramView />}
+            {activeTab === 'telegram' && !isViewer && (isAdmin || hasPermission('telegram.manage')) && <TelegramView />}
 
-            {activeTab === 'documents' && <DocumentView />}
+            {activeTab === 'documents' && !isViewer && <DocumentView />}
 
-            {activeTab === 'reports' && <ReportView />}
+            {activeTab === 'reports' && !isViewer && <ReportView />}
 
-            {activeTab === 'users' && <UserView />}
+            {activeTab === 'users' && !isViewer && hasPermission('users.view') && <UserView />}
 
-            {activeTab === 'settings' && <SettingView />}
+            {activeTab === 'settings' && !isViewer && hasPermission('settings.manage') && <SettingView />}
 
-            {activeTab === 'logs' && <LogView />}
+            {activeTab === 'logs' && !isViewer && hasPermission('logs.view') && <LogView />}
           </div>
         </main>
       </div>

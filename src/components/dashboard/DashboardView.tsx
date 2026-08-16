@@ -71,7 +71,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenCreateEvent,
   onRefresh,
 }) => {
-  const { isAdmin, hasPermission } = useAuth();
+  const { isAdmin, isViewer, hasPermission } = useAuth();
   const { showToast } = useToast();
 
   const handleCelebrateBirthday = async (bday: StaffBirthday) => {
@@ -80,6 +80,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       spread: 70,
       origin: { y: 0.6 },
     });
+
+    if (isViewer) {
+      showToast('info', 'สุขสันต์วันเกิด! 🎂', `ขอร่วมอวยพรวันเกิดแด่คุณ ${bday.name}`);
+      return;
+    }
 
     try {
       await api.post(`/birthdays/${bday.id}/wish`);
@@ -208,7 +213,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* Next Holiday */}
         <div
-          onClick={() => onNavigateTab('holidays')}
+          onClick={() => (!isViewer ? onNavigateTab('holidays') : onNavigateTab('calendar'))}
           className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:shadow-md transition-all cursor-pointer group"
         >
           <div className="flex items-center justify-between">
@@ -227,8 +232,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* Users */}
         <div
-          onClick={() => onNavigateTab('users')}
-          className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:shadow-md transition-all cursor-pointer group"
+          onClick={() => (!isViewer && hasPermission('users.view') ? onNavigateTab('users') : undefined)}
+          className={`p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs transition-all ${
+            !isViewer ? 'hover:shadow-md cursor-pointer' : 'cursor-default'
+          } group`}
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">ผู้ใช้งาน</span>
