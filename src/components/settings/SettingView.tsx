@@ -38,6 +38,20 @@ import {
 } from 'lucide-react';
 import { SystemSettings, EventCategory } from '../../types';
 import { useTheme } from '../../context/ThemeContext';
+import { SchoolLogo } from '../common/SchoolLogo';
+
+// Clean, 100% self-contained vector SVG emblems that work 100% offline & without third-party blocking
+const MOE_SEMA_SVG = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><circle cx="60" cy="60" r="58" fill="%23064e3b"/><circle cx="60" cy="60" r="53" fill="none" stroke="%23facc15" stroke-width="2.5"/><circle cx="60" cy="60" r="48" fill="%23047857"/><circle cx="60" cy="60" r="30" fill="none" stroke="%23fef08a" stroke-width="3"/><circle cx="60" cy="60" r="10" fill="%23facc15"/><g stroke="%23fef08a" stroke-width="3" stroke-linecap="round"><line x1="60" y1="18" x2="60" y2="42"/><line x1="60" y1="78" x2="60" y2="102"/><line x1="18" y1="60" x2="42" y2="60"/><line x1="78" y1="60" x2="102" y2="60"/><line x1="30" y1="30" x2="47" y2="47"/><line x1="73" y1="73" x2="90" y2="90"/><line x1="30" y1="90" x2="47" y2="73"/><line x1="73" y1="47" x2="90" y2="30"/></g><path d="M60 6 C62 14, 58 14, 60 6 Z" fill="%23facc15"/><circle cx="60" cy="60" r="6" fill="%23064e3b"/></svg>';
+
+const OBEC_SEAL_SVG = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><circle cx="60" cy="60" r="58" fill="%231e3a8a"/><circle cx="60" cy="60" r="52" fill="none" stroke="%23f59e0b" stroke-width="2.5"/><circle cx="60" cy="60" r="47" fill="%23172554"/><path d="M60 20 L84 35 L84 72 C84 90 60 102 60 102 C60 102 36 90 36 72 L36 35 Z" fill="%231d4ed8" stroke="%23facc15" stroke-width="2"/><path d="M60 30 L76 42 L76 70 C76 82 60 92 60 92 C60 92 44 82 44 70 L44 42 Z" fill="%231e40af"/><polygon points="60,40 64,52 76,52 66,60 70,72 60,64 50,72 54,60 44,52 56,52" fill="%23facc15"/><path d="M48 76 C55 80 65 80 72 76" stroke="%23ffffff" stroke-width="2" fill="none" stroke-linecap="round"/></svg>';
+
+const TORCH_BOOK_SVG = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><circle cx="60" cy="60" r="58" fill="%232563eb"/><circle cx="60" cy="60" r="52" fill="none" stroke="%23facc15" stroke-width="2.5"/><circle cx="60" cy="60" r="47" fill="%231d4ed8"/><path d="M60 18 C65 28 55 35 60 46 C55 38 52 28 60 18 Z" fill="%23ef4444"/><path d="M58 24 C62 30 57 34 58 42 C56 36 54 28 58 24 Z" fill="%23fbbf24"/><rect x="56" y="46" width="8" height="28" rx="2" fill="%23f59e0b"/><path d="M35 72 Q60 62 85 72 L85 92 Q60 82 35 92 Z" fill="%23ffffff" stroke="%23cbd5e1" stroke-width="1.5"/><line x1="60" y1="64" x2="60" y2="86" stroke="%2394a3b8" stroke-width="2"/></svg>';
+
+const LOTUS_EMBLEM_SVG = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><circle cx="60" cy="60" r="58" fill="%237c3aed"/><circle cx="60" cy="60" r="52" fill="none" stroke="%23fbbf24" stroke-width="2.5"/><circle cx="60" cy="60" r="47" fill="%23581c87"/><path d="M60 25 C68 45 82 55 92 68 C80 80 68 74 60 96 C52 74 40 80 28 68 C38 55 52 45 60 25 Z" fill="%23facc15"/><circle cx="60" cy="62" r="10" fill="%23ffffff"/><circle cx="60" cy="62" r="6" fill="%237c3aed"/></svg>';
+
+const SHIELD_CREST_SVG = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><path d="M60 12 L100 28 L100 68 C100 90 60 110 60 110 C60 110 20 90 20 68 L20 28 Z" fill="%230284c7" stroke="%23f59e0b" stroke-width="3"/><path d="M60 20 L92 34 L92 66 C92 84 60 100 60 100 C60 100 28 84 28 66 L28 34 Z" fill="%230369a1"/><polygon points="60,35 66,50 82,50 69,60 74,75 60,65 46,75 51,60 38,50 54,50" fill="%23fbbf24"/><circle cx="60" cy="57" r="5" fill="%23ffffff"/></svg>';
+
+const GOLD_DHAMMA_SVG = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><circle cx="60" cy="60" r="58" fill="%23b45309"/><circle cx="60" cy="60" r="52" fill="none" stroke="%23fef08a" stroke-width="2.5"/><circle cx="60" cy="60" r="47" fill="%2378350f"/><circle cx="60" cy="60" r="32" fill="none" stroke="%23facc15" stroke-width="4"/><circle cx="60" cy="60" r="12" fill="%23facc15"/><g stroke="%23fde047" stroke-width="3" stroke-linecap="round"><line x1="60" y1="16" x2="60" y2="40"/><line x1="60" y1="80" x2="60" y2="104"/><line x1="16" y1="60" x2="40" y2="60"/><line x1="80" y1="60" x2="104" y2="60"/><line x1="29" y1="29" x2="46" y2="46"/><line x1="74" y1="74" x2="91" y2="91"/><line x1="29" y1="91" x2="46" y2="74"/><line x1="74" y1="46" x2="91" y2="29"/></g><circle cx="60" cy="60" r="7" fill="%2378350f"/></svg>';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { api } from '../../api/client';
@@ -175,27 +189,32 @@ export const SettingView: React.FC = () => {
     {
       id: 'moe-seal',
       name: 'ตรากระทรวงศึกษาธิการ (เสมาธรรมจักร)',
-      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Emblem_of_the_Ministry_of_Education_of_Thailand.svg/240px-Emblem_of_the_Ministry_of_Education_of_Thailand.svg.png',
+      url: MOE_SEMA_SVG,
     },
     {
       id: 'obec-seal',
       name: 'ตรา สพฐ. (การศึกษาขั้นพื้นฐาน)',
-      url: 'https://upload.wikimedia.org/wikipedia/th/thumb/f/f6/OBEC_Logo.png/240px-OBEC_Logo.png',
+      url: OBEC_SEAL_SVG,
+    },
+    {
+      id: 'gold-dhamma',
+      name: 'ตราเสมาธรรมจักรทองคำ',
+      url: GOLD_DHAMMA_SVG,
     },
     {
       id: 'academic-torch',
       name: 'ตราคบเพลิง & หนังสือปัญญา',
-      url: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="%232563eb"/><circle cx="50" cy="50" r="42" fill="none" stroke="%23facc15" stroke-width="2.5"/><path d="M50 20 L58 38 L78 38 L62 50 L68 70 L50 58 L32 70 L38 50 L22 38 L42 38 Z" fill="%23facc15"/><circle cx="50" cy="50" r="14" fill="%231e3a8a"/><path d="M42 46 C42 42, 58 42, 58 46 L58 54 C58 58, 42 58, 42 54 Z" fill="%23ffffff"/><path d="M46 38 Q50 30 54 38 Q50 34 46 38" fill="%23ef4444"/></svg>',
+      url: TORCH_BOOK_SVG,
     },
     {
       id: 'lotus-emblem',
       name: 'ตราบัวแก้วสถาบันการศึกษา',
-      url: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="%234f46e5"/><circle cx="50" cy="50" r="43" fill="none" stroke="%23ffffff" stroke-width="2"/><path d="M50 25 C55 38 65 45 75 55 C65 65 55 60 50 78 C45 60 35 65 25 55 C35 45 45 38 50 25 Z" fill="%23fbbf24"/><circle cx="50" cy="52" r="7" fill="%23ffffff"/></svg>',
+      url: LOTUS_EMBLEM_SVG,
     },
     {
       id: 'shield-crest',
       name: 'ตราโล่เกียรติยศวิชาการ',
-      url: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M50 10 L85 24 L85 58 C85 76 50 92 50 92 C50 92 15 76 15 58 L15 24 Z" fill="%230284c7" stroke="%23ffffff" stroke-width="3"/><path d="M50 16 L79 28 L79 56 C79 70 50 84 50 84 C50 84 21 70 21 56 L21 28 Z" fill="%230369a1"/><path d="M50 30 L55 42 L67 42 L57 50 L61 62 L50 54 L39 62 L43 50 L33 42 L45 42 Z" fill="%23f59e0b"/></svg>',
+      url: SHIELD_CREST_SVG,
     },
   ];
 
@@ -598,31 +617,27 @@ export const SettingView: React.FC = () => {
               <div className="flex items-center gap-3 shrink-0">
                 <div className="flex flex-col items-center">
                   <span className="text-[10px] font-bold text-slate-400 mb-1">พื้นหลังสว่าง</span>
-                  <div className="w-24 h-24 rounded-2xl bg-white border-2 border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden shadow-xs">
-                    {formData.schoolLogoUrl ? (
-                      <img
-                        src={formData.schoolLogoUrl}
-                        alt="School Logo Light"
-                        className="w-full h-full object-contain p-1.5"
-                      />
-                    ) : (
-                      <School className="w-10 h-10 text-slate-300" />
-                    )}
+                  <div className="w-24 h-24 rounded-2xl bg-white border-2 border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden shadow-xs p-1.5">
+                    <SchoolLogo
+                      src={formData.schoolLogoUrl}
+                      alt="School Logo Light"
+                      className="w-full h-full object-contain"
+                      fallbackClassName="w-full h-full rounded-xl flex items-center justify-center bg-slate-50 text-slate-400"
+                      fallbackIconClassName="w-10 h-10 text-slate-300"
+                    />
                   </div>
                 </div>
 
                 <div className="flex flex-col items-center">
                   <span className="text-[10px] font-bold text-slate-400 mb-1">พื้นหลังมืด (Sidebar)</span>
-                  <div className="w-24 h-24 rounded-2xl bg-slate-900 border-2 border-slate-700 flex items-center justify-center overflow-hidden shadow-xs">
-                    {formData.schoolLogoUrl ? (
-                      <img
-                        src={formData.schoolLogoUrl}
-                        alt="School Logo Dark"
-                        className="w-full h-full object-contain p-1.5"
-                      />
-                    ) : (
-                      <School className="w-10 h-10 text-slate-600" />
-                    )}
+                  <div className="w-24 h-24 rounded-2xl bg-slate-900 border-2 border-slate-700 flex items-center justify-center overflow-hidden shadow-xs p-1.5">
+                    <SchoolLogo
+                      src={formData.schoolLogoUrl}
+                      alt="School Logo Dark"
+                      className="w-full h-full object-contain"
+                      fallbackClassName="w-full h-full rounded-xl flex items-center justify-center bg-slate-900 text-slate-500"
+                      fallbackIconClassName="w-10 h-10 text-slate-600"
+                    />
                   </div>
                 </div>
               </div>
@@ -701,7 +716,7 @@ export const SettingView: React.FC = () => {
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
                 ⭐ หรือเลือกใช้ตราสัญลักษณ์การศึกษามาตรฐานสำเร็จรูป (คลิกเลือกได้ทันที):
               </label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
                 {presetSchoolLogos.map((preset) => {
                   const isSelected = formData.schoolLogoUrl === preset.url;
                   return (
@@ -716,7 +731,13 @@ export const SettingView: React.FC = () => {
                       }`}
                     >
                       <div className="w-12 h-12 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center p-1 mb-2 shadow-xs">
-                        <img src={preset.url} alt={preset.name} className="w-full h-full object-contain" />
+                        <SchoolLogo
+                          src={preset.url}
+                          alt={preset.name}
+                          className="w-full h-full object-contain"
+                          fallbackClassName="w-full h-full rounded-lg flex items-center justify-center bg-slate-100 dark:bg-slate-800"
+                          fallbackIconClassName="w-6 h-6 text-slate-400"
+                        />
                       </div>
                       <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200 line-clamp-1">
                         {preset.name}

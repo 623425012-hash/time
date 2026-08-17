@@ -23,6 +23,7 @@ import {
 import { ActiveNavTab } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
+import { SchoolLogo } from '../common/SchoolLogo';
 
 interface SidebarProps {
   activeTab: ActiveNavTab;
@@ -95,17 +96,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* School Logo & Title */}
         <div className="h-16 flex items-center justify-between px-5 border-b border-white/10 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
-            {systemSettings.schoolLogoUrl ? (
-              <img
-                src={systemSettings.schoolLogoUrl}
-                alt={systemSettings.schoolName}
-                className="w-10 h-10 rounded-xl object-contain bg-white/10 p-0.5 shadow-md shrink-0"
-              />
-            ) : (
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-md shrink-0">
-                <School className="w-5 h-5" />
-              </div>
-            )}
+            <SchoolLogo
+              src={systemSettings.schoolLogoUrl}
+              alt={systemSettings.schoolName}
+              schoolName={systemSettings.schoolName}
+              className="w-10 h-10 rounded-xl object-contain bg-white/10 p-0.5 shadow-md shrink-0"
+              fallbackClassName="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-md shrink-0"
+            />
             <div className="min-w-0">
               <h1 className="text-sm font-bold tracking-tight text-white truncate">
                 {systemSettings.schoolName}
