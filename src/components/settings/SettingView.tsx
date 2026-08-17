@@ -171,6 +171,34 @@ export const SettingView: React.FC = () => {
     { id: 'AlertCircle', label: 'เร่งด่วน / ฉุกเฉิน', icon: AlertCircle },
   ];
 
+  const presetSchoolLogos = [
+    {
+      id: 'moe-seal',
+      name: 'ตรากระทรวงศึกษาธิการ (เสมาธรรมจักร)',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Emblem_of_the_Ministry_of_Education_of_Thailand.svg/240px-Emblem_of_the_Ministry_of_Education_of_Thailand.svg.png',
+    },
+    {
+      id: 'obec-seal',
+      name: 'ตรา สพฐ. (การศึกษาขั้นพื้นฐาน)',
+      url: 'https://upload.wikimedia.org/wikipedia/th/thumb/f/f6/OBEC_Logo.png/240px-OBEC_Logo.png',
+    },
+    {
+      id: 'academic-torch',
+      name: 'ตราคบเพลิง & หนังสือปัญญา',
+      url: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="%232563eb"/><circle cx="50" cy="50" r="42" fill="none" stroke="%23facc15" stroke-width="2.5"/><path d="M50 20 L58 38 L78 38 L62 50 L68 70 L50 58 L32 70 L38 50 L22 38 L42 38 Z" fill="%23facc15"/><circle cx="50" cy="50" r="14" fill="%231e3a8a"/><path d="M42 46 C42 42, 58 42, 58 46 L58 54 C58 58, 42 58, 42 54 Z" fill="%23ffffff"/><path d="M46 38 Q50 30 54 38 Q50 34 46 38" fill="%23ef4444"/></svg>',
+    },
+    {
+      id: 'lotus-emblem',
+      name: 'ตราบัวแก้วสถาบันการศึกษา',
+      url: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="%234f46e5"/><circle cx="50" cy="50" r="43" fill="none" stroke="%23ffffff" stroke-width="2"/><path d="M50 25 C55 38 65 45 75 55 C65 65 55 60 50 78 C45 60 35 65 25 55 C35 45 45 38 50 25 Z" fill="%23fbbf24"/><circle cx="50" cy="52" r="7" fill="%23ffffff"/></svg>',
+    },
+    {
+      id: 'shield-crest',
+      name: 'ตราโล่เกียรติยศวิชาการ',
+      url: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M50 10 L85 24 L85 58 C85 76 50 92 50 92 C50 92 15 76 15 58 L15 24 Z" fill="%230284c7" stroke="%23ffffff" stroke-width="3"/><path d="M50 16 L79 28 L79 56 C79 70 50 84 50 84 C50 84 21 70 21 56 L21 28 Z" fill="%230369a1"/><path d="M50 30 L55 42 L67 42 L57 50 L61 62 L50 54 L39 62 L43 50 L33 42 L45 42 Z" fill="%23f59e0b"/></svg>',
+    },
+  ];
+
   const handleApplyPreset = (preset: typeof themePresets[0]) => {
     setFormData((prev) => ({
       ...prev,
@@ -181,17 +209,9 @@ export const SettingView: React.FC = () => {
     }));
   };
 
-  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      showToast('error', 'ไฟล์ไม่ถูกต้อง', 'กรุณาเลือกไฟล์รูปภาพ (PNG, JPG, SVG, WebP)');
-      return;
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-      showToast('error', 'ไฟล์มีขนาดใหญ่เกินไป', 'กรุณาเลือกรูปภาพขนาดไม่เกิน 10 MB');
+  const processFileToLogo = (file: File) => {
+    if (file.size > 15 * 1024 * 1024) {
+      showToast('error', 'ไฟล์มีขนาดใหญ่เกินไป', 'กรุณาเลือกรูปภาพขนาดไม่เกิน 15 MB');
       return;
     }
 
@@ -210,7 +230,7 @@ export const SettingView: React.FC = () => {
         img.onload = () => {
           try {
             const canvas = document.createElement('canvas');
-            const maxDim = 400;
+            const maxDim = 512;
             let width = img.width;
             let height = img.height;
 
@@ -230,35 +250,62 @@ export const SettingView: React.FC = () => {
             if (ctx) {
               ctx.clearRect(0, 0, width, height);
               ctx.drawImage(img, 0, 0, width, height);
-              const optimizedUrl = canvas.toDataURL('image/png');
-              setFormData((prev) => ({ ...prev, schoolLogoUrl: optimizedUrl }));
-              showToast('success', 'แนบรูปภาพโลโก้สำเร็จ', 'กรุณากดปุ่ม "บันทึกการตั้งค่า" ด้านล่างเพื่อยืนยัน');
+              const optimizedUrl = canvas.toDataURL('image/png', 0.95);
+              applyAndSaveNewLogo(optimizedUrl);
             } else {
-              setFormData((prev) => ({ ...prev, schoolLogoUrl: rawDataUrl }));
-              showToast('success', 'แนบรูปภาพโลโก้สำเร็จ', 'กรุณากดปุ่ม "บันทึกการตั้งค่า" ด้านล่างเพื่อยืนยัน');
+              applyAndSaveNewLogo(rawDataUrl);
             }
           } catch {
-            setFormData((prev) => ({ ...prev, schoolLogoUrl: rawDataUrl }));
-            showToast('success', 'แนบรูปภาพโลโก้สำเร็จ', 'กรุณากดปุ่ม "บันทึกการตั้งค่า" ด้านล่างเพื่อยืนยัน');
+            applyAndSaveNewLogo(rawDataUrl);
           } finally {
             setUploadingLogo(false);
             if (logoInputRef.current) logoInputRef.current.value = '';
           }
         };
+
         img.onerror = () => {
-          showToast('error', 'เกิดข้อผิดพลาด', 'ไม่สามารถประมวลผลรูปภาพได้');
+          // If Image tag fails to render (e.g. SVG or format), fallback to raw DataURL directly
+          applyAndSaveNewLogo(rawDataUrl);
           setUploadingLogo(false);
+          if (logoInputRef.current) logoInputRef.current.value = '';
         };
+
         img.src = rawDataUrl;
       };
+
       reader.onerror = () => {
         showToast('error', 'เกิดข้อผิดพลาด', 'ไม่สามารถอ่านไฟล์รูปภาพได้');
         setUploadingLogo(false);
       };
+
       reader.readAsDataURL(file);
     } catch (err: any) {
       showToast('error', 'เกิดข้อผิดพลาด', err?.message || 'ไม่สามารถอัปโหลดรูปภาพได้');
       setUploadingLogo(false);
+    }
+  };
+
+  const applyAndSaveNewLogo = async (logoUrl: string) => {
+    const updated = { ...formData, schoolLogoUrl: logoUrl };
+    setFormData(updated);
+    try {
+      await updateSystemSettings(updated);
+      showToast('success', 'บันทึกโลโก้โรงเรียนสำเร็จ!', 'อัปเดตโลโก้โรงเรียนและซิงค์ข้อมูลเรียบร้อยแล้ว');
+    } catch (e: any) {
+      showToast('warning', 'แนบรูปภาพแล้ว', 'กรุณากดปุ่ม "บันทึกการตั้งค่า" ด้านล่างเพื่อยืนยัน');
+    }
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    processFileToLogo(file);
+  };
+
+  const handleDropLogo = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      processFileToLogo(e.dataTransfer.files[0]);
     }
   };
 
@@ -267,9 +314,15 @@ export const SettingView: React.FC = () => {
       title: 'ต้องการลบรูปภาพโลโก้โรงเรียน?',
       message: 'โลโก้จะถูกนำออกจากส่วนหัวและเอกสารทั้งหมดของโรงเรียน',
       type: 'warning',
-      onConfirm: () => {
-        setFormData((prev) => ({ ...prev, schoolLogoUrl: '' }));
-        showToast('info', 'ลบรูปภาพโลโก้แล้ว', 'กรุณากดปุ่มบันทึกเพื่อยืนยัน');
+      onConfirm: async () => {
+        const updated = { ...formData, schoolLogoUrl: '' };
+        setFormData(updated);
+        try {
+          await updateSystemSettings(updated);
+          showToast('info', 'ลบรูปภาพโลโก้แล้ว', 'อัปเดตระบบเรียบร้อย');
+        } catch {
+          showToast('info', 'ลบรูปภาพโลโก้แล้ว', 'กรุณากดปุ่มบันทึกด้านล่างเพื่อยืนยัน');
+        }
       },
     });
   };
@@ -535,7 +588,12 @@ export const SettingView: React.FC = () => {
               <span className="text-xs text-slate-500">รองรับ PNG, JPG, JPEG, SVG, WebP (สูงสุด 5MB)</span>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-center gap-6 p-6 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+            {/* Upload & Dropzone */}
+            <div 
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleDropLogo}
+              className="flex flex-col sm:flex-row items-center gap-6 p-6 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500 transition-colors"
+            >
               {/* Logo Preview Cards */}
               <div className="flex items-center gap-3 shrink-0">
                 <div className="flex flex-col items-center">
@@ -573,10 +631,10 @@ export const SettingView: React.FC = () => {
               <div className="flex-1 space-y-4 w-full">
                 <div className="space-y-1">
                   <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                    {formData.schoolLogoUrl ? 'โลโก้ปัจจุบันถูกบันทึกในระบบเรียบร้อยแล้ว' : 'ยังไม่มีการตั้งค่าโลโก้โรงเรียน'}
+                    {formData.schoolLogoUrl ? 'โลโก้ปัจจุบันถูกบันทึกและซิงค์ในระบบเรียบร้อยแล้ว' : 'ยังไม่มีการตั้งค่าโลโก้โรงเรียน (ลากไฟล์รูปภาพมาวางที่นี่ได้)'}
                   </p>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    โลโก้จะแสดงในแถบเมนูหลัก แถบหัวกระดาษ รายงาน PDF และการแจ้งเตือนต่างๆ ของโรงเรียน
+                    โลโก้จะแสดงในแถบเมนูหลัก แถบหัวกระดาษ รายงานสรุป PDF และการแจ้งเตือนต่างๆ ของโรงเรียน
                   </p>
                 </div>
 
@@ -584,7 +642,7 @@ export const SettingView: React.FC = () => {
                   <input
                     ref={logoInputRef}
                     type="file"
-                    accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                    accept="image/*,.png,.jpg,.jpeg,.svg,.webp,.gif"
                     onChange={handleLogoUpload}
                     className="hidden"
                   />
@@ -592,17 +650,17 @@ export const SettingView: React.FC = () => {
                     type="button"
                     onClick={() => logoInputRef.current?.click()}
                     disabled={uploadingLogo}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all disabled:opacity-50"
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all disabled:opacity-50 cursor-pointer"
                   >
                     <Upload className="w-4 h-4" />
-                    <span>{uploadingLogo ? 'กำลังอ่านรูปภาพ...' : formData.schoolLogoUrl ? 'เปลี่ยนรูปภาพโลโก้ใหม่' : 'แนบรูปภาพโลโก้'}</span>
+                    <span>{uploadingLogo ? 'กำลังประมวลผลรูปภาพ...' : formData.schoolLogoUrl ? '📂 เปลี่ยนรูปภาพโลโก้ใหม่' : '📂 เลือกรูปภาพโลโก้จากเครื่อง'}</span>
                   </button>
 
                   {formData.schoolLogoUrl && (
                     <button
                       type="button"
                       onClick={handleRemoveLogo}
-                      className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 text-xs font-bold transition-colors"
+                      className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 text-xs font-bold transition-colors cursor-pointer"
                     >
                       <Trash2 className="w-4 h-4" />
                       <span>ลบโลโก้</span>
@@ -610,18 +668,65 @@ export const SettingView: React.FC = () => {
                   )}
                 </div>
 
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-500 mb-1">
-                    หรือระบุลิงก์ URL ของรูปภาพโลโก้โดยตรง:
-                  </label>
-                  <input
-                    type="url"
-                    value={formData.schoolLogoUrl || ''}
-                    onChange={(e) => setFormData({ ...formData, schoolLogoUrl: e.target.value })}
-                    placeholder="https://example.com/logo.png"
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200"
-                  />
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <div className="flex-1">
+                    <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                      หรือระบุลิงก์ URL ของรูปภาพโลโก้โดยตรง:
+                    </label>
+                    <input
+                      type="url"
+                      value={formData.schoolLogoUrl || ''}
+                      onChange={(e) => setFormData({ ...formData, schoolLogoUrl: e.target.value })}
+                      placeholder="https://example.com/logo.png"
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200"
+                    />
+                  </div>
+                  {formData.schoolLogoUrl && (
+                    <div className="sm:self-end">
+                      <button
+                        type="button"
+                        onClick={() => applyAndSaveNewLogo(formData.schoolLogoUrl || '')}
+                        className="w-full sm:w-auto px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-blue-600 hover:text-white text-slate-700 dark:text-slate-200 text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        บันทึกลิงก์โลโก้
+                      </button>
+                    </div>
+                  )}
                 </div>
+              </div>
+            </div>
+
+            {/* Quick Preset Badges & Emblems */}
+            <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                ⭐ หรือเลือกใช้ตราสัญลักษณ์การศึกษามาตรฐานสำเร็จรูป (คลิกเลือกได้ทันที):
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                {presetSchoolLogos.map((preset) => {
+                  const isSelected = formData.schoolLogoUrl === preset.url;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => applyAndSaveNewLogo(preset.url)}
+                      className={`flex flex-col items-center p-3 rounded-2xl border text-center transition-all cursor-pointer ${
+                        isSelected
+                          ? 'border-blue-500 bg-blue-50/80 dark:bg-blue-950/40 ring-2 ring-blue-400'
+                          : 'border-slate-200 dark:border-slate-700 hover:border-blue-300 hover:bg-slate-50 dark:hover:bg-slate-800/80'
+                      }`}
+                    >
+                      <div className="w-12 h-12 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center p-1 mb-2 shadow-xs">
+                        <img src={preset.url} alt={preset.name} className="w-full h-full object-contain" />
+                      </div>
+                      <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200 line-clamp-1">
+                        {preset.name}
+                      </span>
+                      <span className="text-[10px] text-blue-600 dark:text-blue-400 mt-0.5">
+                        {isSelected ? '✓ กำลังใช้งาน' : '+ คลิกเพื่อใช้'}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
