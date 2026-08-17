@@ -89,6 +89,8 @@ function AppContent() {
   const [todayDutySchedule, setTodayDutySchedule] = useState<any>(null);
   const [todayDutyGroup, setTodayDutyGroup] = useState<any>(null);
 
+  const { refreshSettings } = useTheme();
+
   // Initialize and Sync with Cloud Firestore
   useEffect(() => {
     if (!isFirestoreConfigured()) return;
@@ -126,6 +128,7 @@ function AppContent() {
             };
           }
           localStore.saveData();
+          refreshSettings();
           refreshAll();
         } else {
           // Cloud is empty -> Push local data to seed Cloud Firestore
@@ -153,6 +156,7 @@ function AppContent() {
     const unsubscribe = subscribeToFirestoreData((cloudData) => {
       const localData = localStore.getData();
       let changed = false;
+      let settingsChanged = false;
 
       if (cloudData.events && JSON.stringify(localData.events) !== JSON.stringify(cloudData.events)) {
         localData.events = cloudData.events;
@@ -181,20 +185,29 @@ function AppContent() {
       if (cloudData.telegramSettings && JSON.stringify(localData.telegramSettings) !== JSON.stringify(cloudData.telegramSettings)) {
         localData.telegramSettings = cloudData.telegramSettings;
         changed = true;
+        settingsChanged = true;
       }
       if (cloudData.settings && JSON.stringify(localData.systemSettings) !== JSON.stringify(cloudData.settings)) {
-        localData.systemSettings = cloudData.settings;
+        localData.systemSettings = {
+          ...localData.systemSettings,
+          ...cloudData.settings,
+          schoolLogoUrl: cloudData.settings.schoolLogoUrl !== undefined ? cloudData.settings.schoolLogoUrl : localData.systemSettings.schoolLogoUrl,
+        };
         changed = true;
+        settingsChanged = true;
       }
 
       if (changed) {
         localStore.saveData();
+        if (settingsChanged) {
+          refreshSettings();
+        }
         refreshAll();
       }
     });
 
     return () => unsubscribe();
-  }, [refreshAll]);
+  }, [refreshAll, refreshSettings]);
 
   // Fetch Dashboard Summary Data
   const fetchDashboardData = useCallback(async () => {

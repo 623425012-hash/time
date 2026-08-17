@@ -174,6 +174,15 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       console.warn('LocalStorage save error:', e);
     }
 
+    // Direct Cloud Firestore backup to ensure other devices receive changes immediately
+    try {
+      import('../api/firestoreService').then(({ saveSettingsToFirestore, isFirestoreConfigured }) => {
+        if (isFirestoreConfigured()) {
+          saveSettingsToFirestore(updated).catch((err) => console.warn('Cloud Firestore settings save warn:', err));
+        }
+      }).catch(() => {});
+    } catch {}
+
     try {
       const res = await api.put<{ systemSettings: SystemSettings }>('/settings/system', updated);
       if (res && res.systemSettings) {
@@ -188,7 +197,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     } catch (e) {
       console.error('Failed to sync system settings with server:', e);
-      // Still retain locally in memory & localStorage
+      // Still retain locally in memory & localStorage & Firestore
     }
   };
 
