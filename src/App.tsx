@@ -164,6 +164,14 @@ function AppContent() {
         localData.categories = cloudData.categories;
         changed = true;
       }
+      if (cloudData.telegramSettings && JSON.stringify(localData.telegramSettings) !== JSON.stringify(cloudData.telegramSettings)) {
+        localData.telegramSettings = cloudData.telegramSettings;
+        changed = true;
+      }
+      if (cloudData.settings && JSON.stringify(localData.systemSettings) !== JSON.stringify(cloudData.settings)) {
+        localData.systemSettings = cloudData.settings;
+        changed = true;
+      }
 
       if (changed) {
         localStore.saveData();

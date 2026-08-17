@@ -511,6 +511,12 @@ class LocalStore {
         if (rawSettings) cachedSystemSettings = JSON.parse(rawSettings);
       } catch {}
 
+      let cachedTelegramSettings = null;
+      try {
+        const rawTelegram = localStorage.getItem('school_calendar_telegram_settings');
+        if (rawTelegram) cachedTelegramSettings = JSON.parse(rawTelegram);
+      } catch {}
+
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
@@ -518,11 +524,17 @@ class LocalStore {
           if (cachedSystemSettings) {
             parsed.systemSettings = { ...parsed.systemSettings, ...cachedSystemSettings };
           }
+          if (cachedTelegramSettings) {
+            parsed.telegramSettings = { ...parsed.telegramSettings, ...cachedTelegramSettings };
+          }
           return parsed;
         }
       }
       if (cachedSystemSettings) {
         initial.systemSettings = { ...initial.systemSettings, ...cachedSystemSettings };
+      }
+      if (cachedTelegramSettings) {
+        initial.telegramSettings = { ...initial.telegramSettings, ...cachedTelegramSettings };
       }
     } catch {
       // ignore
@@ -534,6 +546,16 @@ class LocalStore {
   private persist(data: LocalDatabaseSchema) {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      if (data.systemSettings) {
+        try {
+          localStorage.setItem('school_calendar_system_settings', JSON.stringify(data.systemSettings));
+        } catch {}
+      }
+      if (data.telegramSettings) {
+        try {
+          localStorage.setItem('school_calendar_telegram_settings', JSON.stringify(data.telegramSettings));
+        } catch {}
+      }
       // Auto push updates to Cloud Firestore in the background
       import('./firestoreService').then(({ uploadFullStateToFirestore, isFirestoreConfigured }) => {
         if (isFirestoreConfigured()) {
