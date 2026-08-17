@@ -99,18 +99,32 @@ function AppContent() {
         const cloudData = await fetchInitialFirestoreData();
         const localData = localStore.getData();
 
-        if (cloudData && (cloudData.events || cloudData.dutySchedules || cloudData.announcements)) {
-          // Update localStore with cloud data
-          if (cloudData.events) localData.events = cloudData.events;
-          if (cloudData.categories) localData.categories = cloudData.categories;
-          if (cloudData.holidays) localData.holidays = cloudData.holidays;
-          if (cloudData.dutyGroups) localData.dutyGroups = cloudData.dutyGroups;
-          if (cloudData.dutySchedules) localData.dutySchedules = cloudData.dutySchedules;
-          if (cloudData.birthdays) localData.birthdays = cloudData.birthdays;
-          if (cloudData.announcements) localData.announcements = cloudData.announcements;
-          if (cloudData.users) localData.users = cloudData.users;
-          if (cloudData.telegramSettings) localData.telegramSettings = cloudData.telegramSettings;
-          if (cloudData.settings) localData.systemSettings = cloudData.settings;
+        if (cloudData) {
+          // Merge non-empty data safely without dropping newly added local events or settings
+          if (Array.isArray(cloudData.events) && cloudData.events.length > 0) {
+            // Merge events by id, keeping newer local additions
+            const cloudEventIds = new Set(cloudData.events.map((e) => e.id));
+            const uniqueLocalEvents = (localData.events || []).filter((e) => !cloudEventIds.has(e.id));
+            localData.events = [...cloudData.events, ...uniqueLocalEvents];
+          }
+          if (Array.isArray(cloudData.categories) && cloudData.categories.length > 0) localData.categories = cloudData.categories;
+          if (Array.isArray(cloudData.holidays) && cloudData.holidays.length > 0) localData.holidays = cloudData.holidays;
+          if (Array.isArray(cloudData.dutyGroups) && cloudData.dutyGroups.length > 0) localData.dutyGroups = cloudData.dutyGroups;
+          if (Array.isArray(cloudData.dutySchedules) && cloudData.dutySchedules.length > 0) localData.dutySchedules = cloudData.dutySchedules;
+          if (Array.isArray(cloudData.birthdays) && cloudData.birthdays.length > 0) localData.birthdays = cloudData.birthdays;
+          if (Array.isArray(cloudData.announcements) && cloudData.announcements.length > 0) localData.announcements = cloudData.announcements;
+          if (Array.isArray(cloudData.users) && cloudData.users.length > 0) localData.users = cloudData.users;
+          
+          if (cloudData.telegramSettings && (cloudData.telegramSettings.botToken || cloudData.telegramSettings.chatId)) {
+            localData.telegramSettings = { ...localData.telegramSettings, ...cloudData.telegramSettings };
+          }
+          if (cloudData.settings) {
+            localData.systemSettings = { 
+              ...localData.systemSettings, 
+              ...cloudData.settings,
+              schoolLogoUrl: cloudData.settings.schoolLogoUrl || localData.systemSettings.schoolLogoUrl 
+            };
+          }
           localStore.saveData();
           refreshAll();
         } else {

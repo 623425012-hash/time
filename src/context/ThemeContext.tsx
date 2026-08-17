@@ -175,7 +175,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
 
     try {
-      const res = await api.put<{ systemSettings: SystemSettings }>('/settings/system', newSettings);
+      const res = await api.put<{ systemSettings: SystemSettings }>('/settings/system', updated);
       if (res && res.systemSettings) {
         const merged = { ...defaultSettings, ...res.systemSettings };
         setSystemSettings(merged);
