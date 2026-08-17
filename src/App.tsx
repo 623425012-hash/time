@@ -32,6 +32,13 @@ import {
   StaffBirthday,
 } from './types';
 import { api } from './api/client';
+import { localStore } from './api/localStore';
+import { 
+  subscribeToFirestoreData, 
+  fetchInitialFirestoreData, 
+  uploadFullStateToFirestore, 
+  isFirestoreConfigured 
+} from './api/firestoreService';
 
 function AppContent() {
   const { user, isViewer, isAdmin, hasPermission } = useAuth();
@@ -81,6 +88,91 @@ function AppContent() {
   const [todayDuties, setTodayDuties] = useState<DutyRoster[]>([]);
   const [todayDutySchedule, setTodayDutySchedule] = useState<any>(null);
   const [todayDutyGroup, setTodayDutyGroup] = useState<any>(null);
+
+  // Initialize and Sync with Cloud Firestore
+  useEffect(() => {
+    if (!isFirestoreConfigured()) return;
+
+    // 1. Initial Pull from Firestore if exists, or Seed Firestore if empty
+    const initCloudData = async () => {
+      try {
+        const cloudData = await fetchInitialFirestoreData();
+        const localData = localStore.getData();
+
+        if (cloudData && (cloudData.events || cloudData.dutySchedules || cloudData.announcements)) {
+          // Update localStore with cloud data
+          if (cloudData.events) localData.events = cloudData.events;
+          if (cloudData.categories) localData.categories = cloudData.categories;
+          if (cloudData.holidays) localData.holidays = cloudData.holidays;
+          if (cloudData.dutyGroups) localData.dutyGroups = cloudData.dutyGroups;
+          if (cloudData.dutySchedules) localData.dutySchedules = cloudData.dutySchedules;
+          if (cloudData.birthdays) localData.birthdays = cloudData.birthdays;
+          if (cloudData.announcements) localData.announcements = cloudData.announcements;
+          if (cloudData.users) localData.users = cloudData.users;
+          if (cloudData.telegramSettings) localData.telegramSettings = cloudData.telegramSettings;
+          if (cloudData.settings) localData.systemSettings = cloudData.settings;
+          localStore.saveData();
+          refreshAll();
+        } else {
+          // Cloud is empty -> Push local data to seed Cloud Firestore
+          await uploadFullStateToFirestore({
+            events: localData.events,
+            categories: localData.categories,
+            holidays: localData.holidays,
+            dutyGroups: localData.dutyGroups,
+            dutySchedules: localData.dutySchedules,
+            birthdays: localData.birthdays,
+            announcements: localData.announcements,
+            users: localData.users,
+            telegramSettings: localData.telegramSettings,
+            settings: localData.systemSettings,
+          });
+        }
+      } catch (err) {
+        console.warn('Error during Firestore sync:', err);
+      }
+    };
+
+    initCloudData();
+
+    // 2. Real-time Subscription to live changes from other devices (PC / Mobile)
+    const unsubscribe = subscribeToFirestoreData((cloudData) => {
+      const localData = localStore.getData();
+      let changed = false;
+
+      if (cloudData.events && JSON.stringify(localData.events) !== JSON.stringify(cloudData.events)) {
+        localData.events = cloudData.events;
+        changed = true;
+      }
+      if (cloudData.dutySchedules && JSON.stringify(localData.dutySchedules) !== JSON.stringify(cloudData.dutySchedules)) {
+        localData.dutySchedules = cloudData.dutySchedules;
+        changed = true;
+      }
+      if (cloudData.announcements && JSON.stringify(localData.announcements) !== JSON.stringify(cloudData.announcements)) {
+        localData.announcements = cloudData.announcements;
+        changed = true;
+      }
+      if (cloudData.dutyGroups && JSON.stringify(localData.dutyGroups) !== JSON.stringify(cloudData.dutyGroups)) {
+        localData.dutyGroups = cloudData.dutyGroups;
+        changed = true;
+      }
+      if (cloudData.birthdays && JSON.stringify(localData.birthdays) !== JSON.stringify(cloudData.birthdays)) {
+        localData.birthdays = cloudData.birthdays;
+        changed = true;
+      }
+      if (cloudData.categories && JSON.stringify(localData.categories) !== JSON.stringify(cloudData.categories)) {
+        localData.categories = cloudData.categories;
+        changed = true;
+      }
+
+      if (changed) {
+        localStore.saveData();
+        refreshAll();
+      }
+    });
+
+    return () => unsubscribe();
+  }, [refreshAll]);
 
   // Fetch Dashboard Summary Data
   const fetchDashboardData = useCallback(async () => {

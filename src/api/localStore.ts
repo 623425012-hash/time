@@ -534,6 +534,23 @@ class LocalStore {
   private persist(data: LocalDatabaseSchema) {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      // Auto push updates to Cloud Firestore in the background
+      import('./firestoreService').then(({ uploadFullStateToFirestore, isFirestoreConfigured }) => {
+        if (isFirestoreConfigured()) {
+          uploadFullStateToFirestore({
+            events: data.events,
+            categories: data.categories,
+            holidays: data.holidays,
+            dutyGroups: data.dutyGroups,
+            dutySchedules: data.dutySchedules,
+            birthdays: data.birthdays,
+            announcements: data.announcements,
+            users: data.users,
+            telegramSettings: data.telegramSettings,
+            settings: data.systemSettings,
+          }).catch((e) => console.warn('Background Cloud sync silent catch:', e));
+        }
+      }).catch(() => {});
     } catch {
       // ignore storage quota error
     }

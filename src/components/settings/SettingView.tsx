@@ -34,12 +34,19 @@ import {
   Compass,
   AlertCircle,
   X,
+  Cloud,
 } from 'lucide-react';
 import { SystemSettings, EventCategory } from '../../types';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { api } from '../../api/client';
+import { localStore } from '../../api/localStore';
+import { 
+  uploadFullStateToFirestore, 
+  fetchInitialFirestoreData, 
+  isFirestoreConfigured 
+} from '../../api/firestoreService';
 
 export const SettingView: React.FC = () => {
   const { systemSettings, updateSystemSettings, applyPreset } = useTheme();
@@ -62,6 +69,39 @@ export const SettingView: React.FC = () => {
   const [catTextColor, setCatTextColor] = useState('#ffffff');
   const [catIcon, setCatIcon] = useState('Calendar');
   const [savingCategory, setSavingCategory] = useState(false);
+  const [isCloudSyncing, setIsCloudSyncing] = useState(false);
+  const [cloudSyncMsg, setCloudSyncMsg] = useState<string | null>(null);
+
+  const handleForceCloudSync = async () => {
+    setIsCloudSyncing(true);
+    setCloudSyncMsg(null);
+    try {
+      const data = localStore.getData();
+      const success = await uploadFullStateToFirestore({
+        events: data.events,
+        categories: data.categories,
+        holidays: data.holidays,
+        dutyGroups: data.dutyGroups,
+        dutySchedules: data.dutySchedules,
+        birthdays: data.birthdays,
+        announcements: data.announcements,
+        users: data.users,
+        telegramSettings: data.telegramSettings,
+        settings: data.systemSettings,
+      });
+
+      if (success) {
+        setCloudSyncMsg('อัปโหลดข้อมูลทั้งหมดขึ้น Firebase Cloud สำเร็จแล้ว!');
+        showToast('success', 'เชื่อมต่อสำเร็จ', 'ส่งข้อมูลทั้งหมดขึ้น Cloud Firestore (time-chi-4ba8d) เรียบร้อยแล้ว');
+      } else {
+        showToast('error', 'เชื่อมต่อไม่สำเร็จ', 'กรุณาตรวจสอบการตั้งค่า Firebase');
+      }
+    } catch (err: any) {
+      showToast('error', 'เกิดข้อผิดพลาด', err?.message);
+    } finally {
+      setIsCloudSyncing(false);
+    }
+  };
 
   useEffect(() => {
     setFormData(systemSettings);
@@ -434,6 +474,50 @@ export const SettingView: React.FC = () => {
           >
             <Database className="w-3.5 h-3.5" />
             <span>นโยบาย & ฐานข้อมูล</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Cloud Database (Firebase Firestore) Banner */}
+      <div className="bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-blue-500/10 dark:from-blue-950/40 dark:via-indigo-950/40 dark:to-blue-950/40 rounded-3xl p-6 border-2 border-blue-300 dark:border-blue-700/60 shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+        <div className="flex items-start sm:items-center gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg shrink-0">
+            <Cloud className="w-7 h-7" />
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                ระบบฐานข้อมูลคลาวด์กลาง (Firebase Firestore)
+              </h3>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                เชื่อมต่อออนไลน์แล้ว (Active)
+              </span>
+            </div>
+            <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
+              โปรเจกต์: <span className="font-mono font-bold text-blue-700 dark:text-blue-300 bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-blue-200 dark:border-slate-700">time-chi-4ba8d</span> • ทุกการเพิ่ม/แก้ไขกิจกรรมบน PC และมือถือจะซิงค์หากันอัตโนมัติ Real-time
+            </p>
+            {cloudSyncMsg && (
+              <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 mt-2 bg-emerald-50 dark:bg-emerald-950/50 p-2 rounded-xl border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>{cloudSyncMsg}</span>
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 shrink-0">
+          <button
+            type="button"
+            onClick={handleForceCloudSync}
+            disabled={isCloudSyncing}
+            className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-lg shadow-blue-500/20 transition-all cursor-pointer disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${isCloudSyncing ? 'animate-spin' : ''}`} />
+            <span>{isCloudSyncing ? 'กำลังส่งข้อมูล...' : '🔄 บังคับส่งข้อมูลขึ้น Cloud ทันที'}</span>
           </button>
         </div>
       </div>
