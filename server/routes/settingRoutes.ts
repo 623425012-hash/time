@@ -3,6 +3,7 @@ import { db } from '../db';
 import { authenticateToken, AuthRequest, requirePermission, logActivity } from '../auth';
 import { TelegramService } from '../telegram';
 import { SystemSettings, TelegramSettings } from '../types';
+import { getBangkokNow } from '../timeUtils';
 
 export const settingRouter = Router();
 
@@ -48,84 +49,83 @@ settingRouter.put('/system', (req: AuthRequest, res: Response) => {
 // Get Telegram Settings (Admin only)
 settingRouter.get('/telegram', authenticateToken, requirePermission('telegram.manage'), (req: AuthRequest, res: Response) => {
   const settings = db.getData().telegramSettings;
-  // Mask bot token for security in display if desired, but keep raw in storage
   const maskedToken = settings.botToken
     ? settings.botToken.substring(0, 6) + '...' + settings.botToken.substring(Math.max(0, settings.botToken.length - 4))
     : '';
 
   const payload = {
     ...settings,
-    dailySummary: settings.notifyDailySummary, // Provide alias for frontend
+    dailySummary: settings.notifyDailySummary,
     botTokenMasked: maskedToken,
   };
 
-  res.json({
-    telegram: payload,
-    telegramSettings: payload,
-  });
+  res.json({ telegramSettings: payload });
 });
 
-// Update Telegram Settings (Admin only)
+// Update Telegram Settings
 settingRouter.put('/telegram', authenticateToken, requirePermission('telegram.manage'), (req: AuthRequest, res: Response) => {
-  const {
-    botToken,
-    chatId,
-    enabled,
-    notifyOnCreate,
-    notifyOnApprove,
-    notifyOnChange,
-    notifyDailySummary,
-    dailySummary,
-    dailySummaryTime,
-    defaultNotifyTimes,
-    notifyAdvanceDays,
-    dutyReminderTime,
-    advanceDutyReminder,
-    advanceDutyReminderTime,
-    birthdayGreetingTime,
-    advanceNotificationTime,
-  } = req.body;
+  try {
+    const rawUpdates: Partial<TelegramSettings> = req.body || {};
+    const current = db.getData().telegramSettings;
 
-  const current = db.getData().telegramSettings;
+    const updates: Partial<TelegramSettings> = { ...rawUpdates };
 
-  if (botToken !== undefined && !botToken.includes('...')) {
-    current.botToken = TelegramService.cleanToken(botToken);
+    // Support field alias for daily summary
+    if (typeof (rawUpdates as any).dailySummary === 'boolean') {
+      updates.notifyDailySummary = (rawUpdates as any).dailySummary;
+    }
+
+    // Default daily summary time to 06:00 if not set or empty
+    if (!updates.dailySummaryTime && !current.dailySummaryTime) {
+      updates.dailySummaryTime = '06:00';
+    }
+
+    // If botToken was not modified (empty or still masked), retain original
+    if (!updates.botToken || updates.botToken.includes('...')) {
+      delete updates.botToken;
+    } else {
+      updates.botToken = TelegramService.cleanToken(updates.botToken);
+    }
+
+    if (updates.chatId) {
+      updates.chatId = TelegramService.cleanChatId(updates.chatId);
+    }
+
+    db.getData().telegramSettings = {
+      ...current,
+      ...updates,
+    };
+    db.save();
+
+    logActivity(req.user, 'UPDATE_SETTINGS', 'อัปเดตการตั้งค่า Telegram Bot และระบบแจ้งเตือนอัตโนมัติ', req);
+
+    const saved = db.getData().telegramSettings;
+    const maskedToken = saved.botToken
+      ? saved.botToken.substring(0, 6) + '...' + saved.botToken.substring(Math.max(0, saved.botToken.length - 4))
+      : '';
+
+    res.json({
+      message: 'บันทึกการตั้งค่า Telegram สำเร็จ',
+      telegramSettings: {
+        ...saved,
+        dailySummary: saved.notifyDailySummary,
+        botTokenMasked: maskedToken,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'เกิดข้อผิดพลาดในการบันทึกการตั้งค่า Telegram' });
   }
-  if (chatId !== undefined) {
-    current.chatId = TelegramService.cleanChatId(chatId);
-  }
-  if (enabled !== undefined) current.enabled = Boolean(enabled);
-  if (notifyOnCreate !== undefined) current.notifyOnCreate = Boolean(notifyOnCreate);
-  if (notifyOnApprove !== undefined) current.notifyOnApprove = Boolean(notifyOnApprove);
-  if (notifyOnChange !== undefined) current.notifyOnChange = Boolean(notifyOnChange);
-  
-  if (notifyDailySummary !== undefined) {
-    current.notifyDailySummary = Boolean(notifyDailySummary);
-  } else if (dailySummary !== undefined) {
-    current.notifyDailySummary = Boolean(dailySummary);
-  }
+});
 
-  if (dailySummaryTime !== undefined) current.dailySummaryTime = dailySummaryTime;
-  if (dutyReminderTime !== undefined) current.dutyReminderTime = dutyReminderTime;
-  if (advanceDutyReminder !== undefined) current.advanceDutyReminder = Boolean(advanceDutyReminder);
-  if (advanceDutyReminderTime !== undefined) current.advanceDutyReminderTime = advanceDutyReminderTime;
-  if (birthdayGreetingTime !== undefined) current.birthdayGreetingTime = birthdayGreetingTime;
-  if (advanceNotificationTime !== undefined) current.advanceNotificationTime = advanceNotificationTime;
-  if (defaultNotifyTimes !== undefined) current.defaultNotifyTimes = defaultNotifyTimes;
-  if (notifyAdvanceDays !== undefined) current.defaultNotifyTimes = notifyAdvanceDays.map(String);
-
-  db.save();
-  logActivity(req.user, 'UPDATE_SETTINGS', 'อัปเดตการตั้งค่าการแจ้งเตือน Telegram', req);
-
-  const responsePayload = {
-    ...current,
-    dailySummary: current.notifyDailySummary,
-  };
-
+// Get Scheduled Jobs Queue (For UI and Monitoring)
+settingRouter.get('/telegram/scheduled-jobs', authenticateToken, requirePermission('telegram.manage'), async (req: AuthRequest, res: Response) => {
+  const { scheduler } = await import('../scheduler');
+  const jobs = scheduler.getScheduledJobs();
+  const bNow = getBangkokNow();
   res.json({
-    message: 'บันทึกการตั้งค่า Telegram สำเร็จ',
-    telegram: responsePayload,
-    telegramSettings: responsePayload,
+    jobs,
+    serverTime: bNow.fullDateTimeStr,
+    todayDate: bNow.dateStr,
   });
 });
 
@@ -140,62 +140,49 @@ settingRouter.post('/telegram/check-scheduled', authenticateToken, requirePermis
     dispatchedCount: result.dispatchedCount,
     dispatchedItems: result.details,
     message: result.dispatchedCount > 0
-      ? `ส่งการแจ้งเตือนตามกำหนดเวลาสำเร็จ ${result.dispatchedCount} รายการ`
+      ? `ส่งการแจ้งเตือนตามกำหนดเวลาสำเร็จ ${result.dispatchedCount} รายการ: ${result.details.join(', ')}`
       : 'ตรวจสอบแล้ว ไม่มีรายการที่ถึงกำหนดในรอบนี้',
   });
 });
 
-// Broadcast Tomorrow's Duty Group (Advance Duty Reminder)
-settingRouter.post('/telegram/broadcast-duty-advance', authenticateToken, requirePermission('telegram.manage'), async (req: AuthRequest, res: Response) => {
-  const now = new Date();
-  now.setDate(now.getDate() + 1);
-  const tmrStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+// Broadcast Today's All Events Summary
+settingRouter.post('/telegram/broadcast-today-events', authenticateToken, requirePermission('telegram.manage'), async (req: AuthRequest, res: Response) => {
+  const bNow = getBangkokNow();
+  const todayStr = bNow.dateStr;
+  const result = await TelegramService.sendTodayAllEventsAlert(todayStr);
 
-  const schedule = (db.getData().dutySchedules || []).find((s) => s.date === tmrStr);
-  if (schedule) {
-    const group = (db.getData().dutyGroups || []).find((g) => g.id === schedule.groupId);
-    if (group) {
-      const result = await TelegramService.sendAdvanceDutyReminder(schedule, group);
-      if (result.success) {
-        logActivity(req.user, 'SEND_TELEGRAM', `ส่งแจ้งเตือนครูเวรวันพรุ่งนี้ล่วงหน้า (${group.name}) ไปยัง Telegram`, req);
-        res.json({ success: true, message: `ส่งแจ้งเตือนครูเวรวันพรุ่งนี้ "${group.name}" สำเร็จ`, result });
-        return;
-      }
-      res.status(400).json({ success: false, error: result.message, message: result.message });
-      return;
-    }
+  if (result.success) {
+    logActivity(req.user, 'SEND_TELEGRAM', `ส่งแจ้งเตือนกิจกรรมทั้งหมดของวันนี้ (${todayStr}) รวม ${result.count} รายการ ไปยัง Telegram`, req);
+    res.json({ success: true, message: `ส่งแจ้งเตือนกิจกรรมวันนี้ (${result.count} รายการ) สำเร็จเรียบร้อยแล้ว`, result });
+  } else {
+    res.status(400).json({ success: false, error: result.message, message: result.message, result });
   }
-
-  res.status(404).json({ success: false, error: `ไม่พบตารางครูเวรสำหรับวันพรุ่งนี้ (${tmrStr})` });
 });
 
-// Test Telegram Bot Connection (accepts optional live botToken and chatId from body)
-settingRouter.post('/telegram/test', authenticateToken, requirePermission('telegram.manage'), async (req: AuthRequest, res: Response) => {
-  const { customMessage, botToken, chatId } = req.body;
+// Broadcast Specific Event Alert Immediately
+settingRouter.post('/telegram/broadcast-event/:id', authenticateToken, requirePermission('events.view'), async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  const event = (db.getData().events || []).find((e) => e.id === id);
 
-  const msg = customMessage || `🔔 <b>ทดสอบการเชื่อมต่อระบบแจ้งเตือน Telegram</b>\n━━━━━━━━━━━━━━━━━━━━\n✅ ทดสอบส่งข้อความสำเร็จ! ระบบสามารถเชื่อมต่อและแจ้งเตือนเข้ากลุ่มได้ตามปกติ\n📅 วันที่และเวลา: ${new Date().toLocaleString('th-TH')}\n🏫 ${db.getData().systemSettings.schoolName}`;
+  if (!event) {
+    res.status(404).json({ success: false, error: 'ไม่พบกิจกรรมที่ต้องการแจ้งเตือน' });
+    return;
+  }
 
-  // If user typed botToken / chatId in frontend, test with those credentials
-  const options = {
-    overrideToken: botToken && !botToken.includes('...') ? TelegramService.cleanToken(botToken) : undefined,
-    overrideChatId: chatId ? TelegramService.cleanChatId(chatId) : undefined,
-    skipEnabledCheck: true, // Allow testing even if toggled off
-  };
+  const result = await TelegramService.sendAdvanceEventReminder(event, 'แจ้งเตือนกิจกรรมพิเศษ');
 
-  const result = await TelegramService.sendMessage(msg, 'TEST', undefined, options);
-  
   if (result.success) {
-    logActivity(req.user, 'SEND_TELEGRAM', 'ทดสอบส่งข้อความ Telegram สำเร็จ', req);
-    res.json({ success: true, message: 'ทดสอบส่งข้อความสำเร็จ กรุณาตรวจสอบใน Telegram' });
+    logActivity(req.user, 'SEND_TELEGRAM', `ส่งแจ้งเตือนกิจกรรม "${event.title}" ไปยัง Telegram ทันที`, req);
+    res.json({ success: true, message: `ส่งแจ้งเตือนกิจกรรม "${event.title}" ไปยัง Telegram สำเร็จ`, result });
   } else {
-    res.status(400).json({ success: false, error: result.message, message: result.message, rawError: result.rawError });
+    res.status(400).json({ success: false, error: result.message, message: result.message, result });
   }
 });
 
 // Broadcast Today's Daily Summary
 settingRouter.post('/telegram/broadcast-daily', authenticateToken, requirePermission('telegram.manage'), async (req: AuthRequest, res: Response) => {
-  const now = new Date();
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const bNow = getBangkokNow();
+  const todayStr = bNow.dateStr;
   const result = await TelegramService.sendDailySummary(todayStr);
 
   if (result.success) {
@@ -208,8 +195,8 @@ settingRouter.post('/telegram/broadcast-daily', authenticateToken, requirePermis
 
 // Broadcast Today's Duty Set
 settingRouter.post('/telegram/broadcast-duty-today', authenticateToken, requirePermission('telegram.manage'), async (req: AuthRequest, res: Response) => {
-  const now = new Date();
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const bNow = getBangkokNow();
+  const todayStr = bNow.dateStr;
 
   const schedule = (db.getData().dutySchedules || []).find((s) => s.date === todayStr);
   if (schedule) {
@@ -241,12 +228,34 @@ settingRouter.post('/telegram/broadcast-duty-today', authenticateToken, requireP
   res.status(404).json({ success: false, error: 'ไม่พบตารางครูเวรที่ลงไว้สำหรับวันนี้' });
 });
 
+// Broadcast Tomorrow's Duty Group (Advance Duty Reminder)
+settingRouter.post('/telegram/broadcast-duty-advance', authenticateToken, requirePermission('telegram.manage'), async (req: AuthRequest, res: Response) => {
+  const bNow = getBangkokNow();
+  const tmrObj = new Date(bNow.timestamp + 24 * 60 * 60 * 1000 + 7 * 60 * 60 * 1000);
+  const tmrStr = `${tmrObj.getUTCFullYear()}-${String(tmrObj.getUTCMonth() + 1).padStart(2, '0')}-${String(tmrObj.getUTCDate()).padStart(2, '0')}`;
+
+  const schedule = (db.getData().dutySchedules || []).find((s) => s.date === tmrStr);
+  if (schedule) {
+    const group = (db.getData().dutyGroups || []).find((g) => g.id === schedule.groupId);
+    if (group) {
+      const result = await TelegramService.sendAdvanceDutyReminder(schedule, group);
+      if (result.success) {
+        logActivity(req.user, 'SEND_TELEGRAM', `ส่งแจ้งเตือนครูเวรวันพรุ่งนี้ล่วงหน้า (${group.name}) ไปยัง Telegram`, req);
+        res.json({ success: true, message: `ส่งแจ้งเตือนครูเวรวันพรุ่งนี้ "${group.name}" สำเร็จ`, result });
+        return;
+      }
+      res.status(400).json({ success: false, error: result.message, message: result.message });
+      return;
+    }
+  }
+
+  res.status(404).json({ success: false, error: `ไม่พบตารางครูเวรสำหรับวันพรุ่งนี้ (${tmrStr})` });
+});
+
 // Broadcast Today's Birthdays
 settingRouter.post('/telegram/broadcast-birthdays-today', authenticateToken, requirePermission('telegram.manage'), async (req: AuthRequest, res: Response) => {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const todayMMDD = `${month}-${day}`;
+  const bNow = getBangkokNow();
+  const todayMMDD = `${bNow.month}-${bNow.day}`;
 
   const todayBirthdays = (db.getData().birthdays || []).filter((b) => b.birthDate && b.birthDate.endsWith(todayMMDD));
   if (todayBirthdays.length === 0) {
@@ -264,10 +273,33 @@ settingRouter.post('/telegram/broadcast-birthdays-today', authenticateToken, req
   res.json({ success: true, message: `ส่งคำอวยพรวันเกิดสำเร็จ (${count}/${todayBirthdays.length} ท่าน)` });
 });
 
+// Test Telegram Bot Connection
+settingRouter.post('/telegram/test', authenticateToken, requirePermission('telegram.manage'), async (req: AuthRequest, res: Response) => {
+  const { customMessage, botToken, chatId } = req.body;
+  const bNow = getBangkokNow();
+
+  const msg = customMessage || `🔔 <b>ทดสอบการเชื่อมต่อระบบแจ้งเตือน Telegram</b>\n━━━━━━━━━━━━━━━━━━━━\n✅ ทดสอบส่งข้อความสำเร็จ! ระบบสามารถเชื่อมต่อและแจ้งเตือนเข้ากลุ่มได้ตามปกติ\n📅 วันที่และเวลา (ไทย): ${bNow.fullDateTimeStr}\n🏫 ${db.getData().systemSettings.schoolName}`;
+
+  const options = {
+    overrideToken: botToken && !botToken.includes('...') ? TelegramService.cleanToken(botToken) : undefined,
+    overrideChatId: chatId ? TelegramService.cleanChatId(chatId) : undefined,
+    skipEnabledCheck: true,
+  };
+
+  const result = await TelegramService.sendMessage(msg, 'TEST', undefined, options);
+  
+  if (result.success) {
+    logActivity(req.user, 'SEND_TELEGRAM', 'ทดสอบส่งข้อความ Telegram สำเร็จ', req);
+    res.json({ success: true, message: 'ทดสอบส่งข้อความสำเร็จ กรุณาตรวจสอบใน Telegram' });
+  } else {
+    res.status(400).json({ success: false, error: result.message, message: result.message, rawError: result.rawError });
+  }
+});
+
 // Trigger Instant Daily Summary Test (Alias)
 settingRouter.post('/telegram/trigger-daily-summary', authenticateToken, requirePermission('telegram.manage'), async (req: AuthRequest, res: Response) => {
-  const now = new Date();
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const bNow = getBangkokNow();
+  const todayStr = bNow.dateStr;
   const result = await TelegramService.sendDailySummary(todayStr);
 
   if (result.success) {
@@ -305,4 +337,3 @@ settingRouter.post('/reset-default', authenticateToken, requirePermission('setti
   logActivity(req.user, 'UPDATE_SETTINGS', 'คืนค่าระบบเป็นค่าเริ่มต้น (Reset to Default)', req);
   res.json({ message: 'คืนค่าระบบเป็นค่าเริ่มต้นเรียบร้อยแล้ว', systemSettings: restored.systemSettings });
 });
-

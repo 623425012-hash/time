@@ -25,7 +25,7 @@ import {
   formatDailySummaryMessage,
   formatTestMessage,
 } from '../utils/telegramDirect';
-import { formatThaiDate, formatThaiDateRange } from '../utils/thaiDate';
+import { formatThaiDate, formatThaiDateRange, getBangkokDateTime } from '../utils/thaiDate';
 
 const STORAGE_KEY = 'school_calendar_local_db_v2';
 
@@ -1345,6 +1345,37 @@ class LocalStore {
         true
       );
       return res;
+    }
+    if (pathPart === '/settings/telegram/broadcast-today-events') {
+      const bNow = getBangkokDateTime();
+      const todayStr = bNow.dateStr;
+      const todayEvents = (this.data.events || []).filter(
+        (e) => e.status === 'APPROVED' && e.startDate <= todayStr && e.endDate >= todayStr
+      );
+      const todaySched = (this.data.dutySchedules || []).find((s) => s.date === todayStr);
+      const todayGrp = todaySched ? (this.data.dutyGroups || []).find((g) => g.id === todaySched.groupId) || null : null;
+      const todayMMDD = todayStr.substring(5);
+      const todayBirthdays = (this.data.birthdays || []).filter((b) => b.birthDate && b.birthDate.endsWith(todayMMDD));
+      const msg = formatDailySummaryMessage(
+        this.data.events,
+        todaySched || null,
+        todayGrp || null,
+        todayBirthdays,
+        this.data.systemSettings.schoolName,
+        todayStr
+      );
+      const res = await this.dispatchTelegram(msg, 'DAILY_SUMMARY', undefined, undefined, undefined, true);
+      return { ...res, count: todayEvents.length, message: `ส่งแจ้งเตือนกิจกรรมวันนี้ (${todayEvents.length} รายการ) สำเร็จเรียบร้อยแล้ว` };
+    }
+    if (pathPart.startsWith('/settings/telegram/broadcast-event/')) {
+      const eventId = pathPart.split('/')[4];
+      const ev = (this.data.events || []).find((e) => e.id === eventId);
+      if (!ev) {
+        return { success: false, message: 'ไม่พบกิจกรรมที่ต้องการแจ้งเตือน' };
+      }
+      const msg = formatEventMessage(ev, this.data.systemSettings.schoolName, '📢 <b>แจ้งเตือนกิจกรรมโรงเรียน</b>');
+      const res = await this.dispatchTelegram(msg, 'EVENT_REMINDER', ev.id, undefined, undefined, true);
+      return { ...res, message: `ส่งแจ้งเตือนกิจกรรม "${ev.title}" ไปยัง Telegram สำเร็จ` };
     }
     if (pathPart === '/settings/telegram/broadcast-daily' || pathPart === '/settings/telegram/trigger-daily-summary') {
       const todayStr = new Date().toISOString().split('T')[0];

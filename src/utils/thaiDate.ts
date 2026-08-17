@@ -181,3 +181,84 @@ export function getThaiDayOfWeek(dateStr?: string | null, short = false): string
 }
 
 export const formatThaiDayOfWeek = getThaiDayOfWeek;
+
+/**
+ * Returns current Date and formatted strings in Bangkok (UTC+7) timezone
+ */
+export function getBangkokDateTime(): {
+  now: Date;
+  year: number;
+  month: string;
+  day: string;
+  dateStr: string;
+  hours: string;
+  minutes: string;
+  timeStr: string;
+  fullDateTimeStr: string;
+  timestamp: number;
+} {
+  const d = new Date();
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Bangkok',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    });
+
+    const parts = formatter.formatToParts(d);
+    const getPart = (type: string) => parts.find((p) => p.type === type)?.value || '00';
+
+    const year = parseInt(getPart('year'), 10) || d.getUTCFullYear();
+    const month = getPart('month').padStart(2, '0');
+    const day = getPart('day').padStart(2, '0');
+    let hours = getPart('hour').padStart(2, '0');
+    if (hours === '24') hours = '00';
+    const minutes = getPart('minute').padStart(2, '0');
+    const seconds = getPart('second').padStart(2, '0');
+
+    const dateStr = `${year}-${month}-${day}`;
+    const timeStr = `${hours}:${minutes}`;
+
+    return {
+      now: d,
+      year,
+      month,
+      day,
+      dateStr,
+      hours,
+      minutes,
+      timeStr,
+      fullDateTimeStr: `${dateStr} ${timeStr}:${seconds}`,
+      timestamp: d.getTime(),
+    };
+  } catch {
+    const bkk = new Date(d.getTime() + 7 * 60 * 60 * 1000);
+    const year = bkk.getUTCFullYear();
+    const month = String(bkk.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(bkk.getUTCDate()).padStart(2, '0');
+    const hours = String(bkk.getUTCHours()).padStart(2, '0');
+    const minutes = String(bkk.getUTCMinutes()).padStart(2, '0');
+    const seconds = String(bkk.getUTCSeconds()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+    const timeStr = `${hours}:${minutes}`;
+
+    return {
+      now: d,
+      year,
+      month,
+      day,
+      dateStr,
+      hours,
+      minutes,
+      timeStr,
+      fullDateTimeStr: `${dateStr} ${timeStr}:${seconds}`,
+      timestamp: d.getTime(),
+    };
+  }
+}
+

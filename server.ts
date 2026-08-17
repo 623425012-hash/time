@@ -32,8 +32,35 @@ async function startServer() {
   // Vercel Cron Trigger Endpoint
   app.get('/api/scheduler/cron', async (_req, res) => {
     try {
-      await scheduler.checkJobs();
-      res.json({ success: true, message: 'Cron job executed successfully', timestamp: new Date().toISOString() });
+      const result = await scheduler.checkJobs();
+      res.json({ success: true, message: 'Cron job executed successfully', dispatchedCount: result.dispatchedCount, timestamp: new Date().toISOString() });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
+  // Direct scheduler check & queue endpoints
+  app.post('/api/scheduler/check', async (req, res) => {
+    try {
+      const forceAll = Boolean(req.body?.forceAllDue);
+      const result = await scheduler.checkJobs(forceAll);
+      res.json({
+        success: true,
+        dispatchedCount: result.dispatchedCount,
+        dispatchedItems: result.details,
+        message: result.dispatchedCount > 0
+          ? `ส่งการแจ้งเตือนสำเร็จ ${result.dispatchedCount} รายการ`
+          : 'ตรวจสอบแล้ว ไม่มีรายการที่ถึงกำหนดในรอบนี้',
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
+  app.get('/api/scheduler/jobs', async (_req, res) => {
+    try {
+      const jobs = scheduler.getScheduledJobs();
+      res.json({ jobs });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err?.message });
     }

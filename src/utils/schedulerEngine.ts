@@ -3,8 +3,8 @@
 // trigger accurately according to dates & times on Vercel, Serverless, and in-browser environments.
 
 import { localStore } from '../api/localStore';
-import { SchoolEvent, DutySchedule, DutyGroup, StaffBirthday, TelegramSettings, ScheduledJobItem } from '../types';
-import { formatThaiDate } from './thaiDate';
+import { SchoolEvent, TelegramSettings, ScheduledJobItem } from '../types';
+import { formatThaiDate, getBangkokDateTime } from './thaiDate';
 
 export interface TimingConfig {
   key: string;
@@ -41,7 +41,7 @@ export const NOTIFICATION_TIMINGS: Record<string, TimingConfig> = {
   },
   'SAME_DAY_MORNING': {
     key: 'SAME_DAY_MORNING',
-    label: 'เตือนเช้าวันจัดกิจกรรม',
+    label: 'เตือนเช้าวันจัดกิจกรรม (06:00 น.)',
     daysOffset: 0,
     useMorningTime: true,
   },
@@ -77,7 +77,7 @@ export const NOTIFICATION_TIMINGS: Record<string, TimingConfig> = {
 export function calculateEventTriggerDate(
   event: SchoolEvent,
   timingKey: string,
-  advanceNotificationTime = '07:00'
+  advanceNotificationTime = '06:00'
 ): Date | null {
   const config = NOTIFICATION_TIMINGS[timingKey];
   if (!config) return null;
@@ -89,8 +89,8 @@ export function calculateEventTriggerDate(
 
     if (config.useMorningTime) {
       // Day-offset based reminder, triggers at morning advance time
-      const [advH, advM] = advanceNotificationTime.split(':').map(Number);
-      const targetDate = new Date(startYear, startMonth - 1, startDay, advH || 7, advM || 0, 0, 0);
+      const [advH, advM] = (advanceNotificationTime || '06:00').split(':').map(Number);
+      const targetDate = new Date(startYear, startMonth - 1, startDay, advH || 6, advM || 0, 0, 0);
       if (config.daysOffset) {
         targetDate.setDate(targetDate.getDate() + config.daysOffset);
       }
@@ -116,17 +116,20 @@ export function getUpcomingScheduledJobs(): ScheduledJobItem[] {
   const data = localStore.getData();
   const settings = data.telegramSettings || ({} as TelegramSettings);
   const sentMap = settings.sentAdvanceReminders || {};
-  const advanceTime = settings.advanceNotificationTime || settings.dailySummaryTime || '07:00';
-  const now = new Date();
+  const advanceTime = settings.advanceNotificationTime || settings.dailySummaryTime || '06:00';
+  const bNow = getBangkokDateTime();
+  const nowMs = bNow.timestamp;
   const jobs: ScheduledJobItem[] = [];
 
   // 1. Events Advance Notifications
   const approvedEvents = (data.events || []).filter((e) => e.status === 'APPROVED' && e.sendTelegram);
 
   for (const ev of approvedEvents) {
-    if (!ev.notifySchedule || ev.notifySchedule.length === 0) continue;
+    const notifyList = ev.notifySchedule && ev.notifySchedule.length > 0
+      ? ev.notifySchedule
+      : ['SAME_DAY_MORNING'];
 
-    for (const timing of ev.notifySchedule) {
+    for (const timing of notifyList) {
       const config = NOTIFICATION_TIMINGS[timing];
       if (!config) continue;
 
@@ -138,8 +141,10 @@ export function getUpcomingScheduledJobs(): ScheduledJobItem[] {
         (l) => l.eventId === ev.id && l.content?.includes(`[${timing}]`)
       );
 
-      const diffMs = triggerDate.getTime() - now.getTime();
+      const diffMs = triggerDate.getTime() - nowMs;
       let status: ScheduledJobItem['status'] = 'PENDING';
+      let isDue = false;
+
       if (isSent) {
         status = 'SENT';
       } else if (diffMs <= 0) {
@@ -147,10 +152,11 @@ export function getUpcomingScheduledJobs(): ScheduledJobItem[] {
         const [endYear, endMonth, endDay] = ev.endDate.split('-').map(Number);
         const [endH, endM] = (ev.endTime || '16:30').split(':').map(Number);
         const eventEndDate = new Date(endYear, endMonth - 1, endDay, endH, endM, 0, 0);
-        if (now > eventEndDate) {
+        if (nowMs > eventEndDate.getTime() + 30 * 60 * 1000) {
           continue; // skip expired past events
         }
         status = 'DUE_NOW';
+        isDue = true;
       }
 
       const hours = String(triggerDate.getHours()).padStart(2, '0');
@@ -160,6 +166,7 @@ export function getUpcomingScheduledJobs(): ScheduledJobItem[] {
       const m = String(triggerDate.getMonth() + 1).padStart(2, '0');
       const d = String(triggerDate.getDate()).padStart(2, '0');
       const dateStr = `${y}-${m}-${d}`;
+      const trigStr = `${dateStr} ${timeStr}:00`;
 
       jobs.push({
         id: reminderKey,
@@ -169,17 +176,21 @@ export function getUpcomingScheduledJobs(): ScheduledJobItem[] {
         targetDate: dateStr,
         targetTime: timeStr,
         timingLabel: config.label,
-        scheduledDateTime: triggerDate.toISOString(),
+        scheduledDateTime: trigStr,
+        triggerDateTime: trigStr,
         status,
+        isSent,
+        isDue,
         details: `กำหนดจัด: ${formatThaiDate(ev.startDate, { format: 'short' })} (${ev.startTime || '08:30'} น.)`,
       });
     }
   }
 
-  // 2. Daily Summary Job for today/tomorrow
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  const summaryTime = settings.dailySummaryTime || '07:00';
+  // 2. Daily Summary Job for today
+  const todayStr = bNow.dateStr;
+  const summaryTime = settings.dailySummaryTime || '06:00';
   const summarySent = settings.lastDailySummaryDate === todayStr;
+  const summaryDue = bNow.timeStr >= summaryTime && !summarySent;
 
   jobs.push({
     id: `daily_summary_${todayStr}`,
@@ -189,17 +200,21 @@ export function getUpcomingScheduledJobs(): ScheduledJobItem[] {
     targetDate: todayStr,
     targetTime: summaryTime,
     timingLabel: `ทุกวัน เวลา ${summaryTime} น.`,
-    scheduledDateTime: `${todayStr}T${summaryTime}:00`,
-    status: summarySent ? 'SENT' : 'PENDING',
+    scheduledDateTime: `${todayStr} ${summaryTime}:00`,
+    triggerDateTime: `${todayStr} ${summaryTime}:00`,
+    status: summarySent ? 'SENT' : summaryDue ? 'DUE_NOW' : 'PENDING',
+    isSent: summarySent,
+    isDue: summaryDue,
     details: 'รวบรวมกิจกรรมประจำวัน ตารางครูเวร และวันเกิดบุคลากร',
   });
 
   // 3. Today Duty Reminder
-  const dutyTime = settings.dutyReminderTime || settings.dailySummaryTime || '06:30';
+  const dutyTime = settings.dutyReminderTime || '06:00';
   const todayDutySchedule = (data.dutySchedules || []).find((s) => s.date === todayStr);
   if (todayDutySchedule) {
     const group = (data.dutyGroups || []).find((g) => g.id === todayDutySchedule.groupId);
     const dutySent = settings.lastDutyReminderDate === todayStr;
+    const dutyDue = bNow.timeStr >= dutyTime && !dutySent;
     jobs.push({
       id: `duty_today_${todayStr}`,
       title: `แจ้งเตือนครูเวรประจำวัน (${group?.name || 'ชุดเวร'})`,
@@ -208,22 +223,25 @@ export function getUpcomingScheduledJobs(): ScheduledJobItem[] {
       targetDate: todayStr,
       targetTime: dutyTime,
       timingLabel: `ทุกวัน เวลา ${dutyTime} น.`,
-      scheduledDateTime: `${todayStr}T${dutyTime}:00`,
-      status: dutySent ? 'SENT' : 'PENDING',
+      scheduledDateTime: `${todayStr} ${dutyTime}:00`,
+      triggerDateTime: `${todayStr} ${dutyTime}:00`,
+      status: dutySent ? 'SENT' : dutyDue ? 'DUE_NOW' : 'PENDING',
+      isSent: dutySent,
+      isDue: dutyDue,
       details: group ? `สมาชิก ${group.members?.length || 0} คน` : undefined,
     });
   }
 
   // 4. Advance Duty Reminder (Tomorrow's Duty Group)
   if (settings.advanceDutyReminder !== false) {
-    const tmr = new Date(now);
-    tmr.setDate(tmr.getDate() + 1);
-    const tmrStr = `${tmr.getFullYear()}-${String(tmr.getMonth() + 1).padStart(2, '0')}-${String(tmr.getDate()).padStart(2, '0')}`;
+    const tmrDateObj = new Date(bNow.timestamp + 24 * 60 * 60 * 1000 + 7 * 60 * 60 * 1000);
+    const tmrStr = `${tmrDateObj.getUTCFullYear()}-${String(tmrDateObj.getUTCMonth() + 1).padStart(2, '0')}-${String(tmrDateObj.getUTCDate()).padStart(2, '0')}`;
     const tmrDutySchedule = (data.dutySchedules || []).find((s) => s.date === tmrStr);
     if (tmrDutySchedule) {
       const tmrGroup = (data.dutyGroups || []).find((g) => g.id === tmrDutySchedule.groupId);
       const advDutyTime = settings.advanceDutyReminderTime || '17:00';
       const advSent = settings.lastAdvanceDutyReminderDate === tmrStr;
+      const advDue = bNow.timeStr >= advDutyTime && !advSent;
       jobs.push({
         id: `duty_advance_${tmrStr}`,
         title: `เตือนครูเวรวันพรุ่งนี้ล่วงหน้า (${tmrGroup?.name || 'ชุดเวร'})`,
@@ -232,8 +250,11 @@ export function getUpcomingScheduledJobs(): ScheduledJobItem[] {
         targetDate: todayStr,
         targetTime: advDutyTime,
         timingLabel: `วันก่อนหน้า เวลา ${advDutyTime} น.`,
-        scheduledDateTime: `${todayStr}T${advDutyTime}:00`,
-        status: advSent ? 'SENT' : 'PENDING',
+        scheduledDateTime: `${todayStr} ${advDutyTime}:00`,
+        triggerDateTime: `${todayStr} ${advDutyTime}:00`,
+        status: advSent ? 'SENT' : advDue ? 'DUE_NOW' : 'PENDING',
+        isSent: advSent,
+        isDue: advDue,
         details: `เตรียมความพร้อมสำหรับเวรวันที่ ${formatThaiDate(tmrStr, { format: 'short' })}`,
       });
     }
@@ -280,16 +301,12 @@ export async function checkAndDispatchScheduledNotifications(forceAllDue = false
     settings.sentAdvanceReminders = {};
   }
 
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const todayStr = `${year}-${month}-${day}`;
-  const currentHours = String(now.getHours()).padStart(2, '0');
-  const currentMinutes = String(now.getMinutes()).padStart(2, '0');
-  const currentTimeStr = `${currentHours}:${currentMinutes}`;
+  const bNow = getBangkokDateTime();
+  const todayStr = bNow.dateStr;
+  const currentTimeStr = bNow.timeStr;
+  const nowMs = bNow.timestamp;
 
-  const advanceTime = settings.advanceNotificationTime || settings.dailySummaryTime || '07:00';
+  const advanceTime = settings.advanceNotificationTime || settings.dailySummaryTime || '06:00';
   const dispatchedItems: string[] = [];
 
   // ==========================================
@@ -298,18 +315,20 @@ export async function checkAndDispatchScheduledNotifications(forceAllDue = false
   const approvedEvents = (data.events || []).filter((e) => e.status === 'APPROVED' && e.sendTelegram);
 
   for (const event of approvedEvents) {
-    if (!event.notifySchedule || event.notifySchedule.length === 0) continue;
+    const notifyList = event.notifySchedule && event.notifySchedule.length > 0
+      ? event.notifySchedule
+      : ['SAME_DAY_MORNING'];
 
     // Check if event has ended completely
     const [endYear, endMonth, endDay] = event.endDate.split('-').map(Number);
     const [endH, endM] = (event.endTime || '16:30').split(':').map(Number);
     const eventEndDate = new Date(endYear, endMonth - 1, endDay, endH, endM, 0, 0);
 
-    if (now > eventEndDate) {
-      continue; // Event already completed in the past
+    if (nowMs > eventEndDate.getTime() + 30 * 60 * 1000 && !forceAllDue) {
+      continue;
     }
 
-    for (const timing of event.notifySchedule) {
+    for (const timing of notifyList) {
       const config = NOTIFICATION_TIMINGS[timing];
       if (!config) continue;
 
@@ -319,14 +338,14 @@ export async function checkAndDispatchScheduledNotifications(forceAllDue = false
       const reminderKey = `event_${event.id}_${timing}_${event.startDate}`;
       const isAlreadySent = !!settings.sentAdvanceReminders[reminderKey];
 
-      if (isAlreadySent) continue;
+      if (isAlreadySent && !forceAllDue) continue;
 
       // Determine if time has reached
-      const isDue = now.getTime() >= triggerDate.getTime();
+      const isDue = nowMs >= triggerDate.getTime();
 
       if (isDue || forceAllDue) {
         console.log(`[SchedulerEngine] Triggering advance alert [${timing}] for event: ${event.title}`);
-        const header = `⏰ <b>แจ้งเตือนกิจกรรมล่วงหน้า: ${config.label}</b> [${timing}]`;
+        const header = `⏰ <b>แจ้งเตือนกิจกรรม: ${config.label}</b>`;
         const res = await localStore.dispatchTelegram(
           'EVENT_REMINDER',
           { event, customHeader: header, timingLabel: config.label },
@@ -344,8 +363,8 @@ export async function checkAndDispatchScheduledNotifications(forceAllDue = false
   // ==========================================
   // 2. Daily Summary Check
   // ==========================================
-  const summaryEnabled = settings.notifyDailySummary || settings.dailySummary;
-  const summaryTime = settings.dailySummaryTime || '07:00';
+  const summaryEnabled = settings.notifyDailySummary !== false && (settings as any).dailySummary !== false;
+  const summaryTime = settings.dailySummaryTime || '06:00';
 
   if (summaryEnabled && (settings.lastDailySummaryDate !== todayStr || forceAllDue)) {
     if (currentTimeStr >= summaryTime || forceAllDue) {
@@ -361,7 +380,7 @@ export async function checkAndDispatchScheduledNotifications(forceAllDue = false
   // ==========================================
   // 3. Today's Duty Group Reminder Check
   // ==========================================
-  const dutyTime = settings.dutyReminderTime || settings.dailySummaryTime || '06:30';
+  const dutyTime = settings.dutyReminderTime || '06:00';
   if (settings.lastDutyReminderDate !== todayStr || forceAllDue) {
     if (currentTimeStr >= dutyTime || forceAllDue) {
       const todaySchedule = (data.dutySchedules || []).find((s) => s.date === todayStr);
@@ -383,9 +402,8 @@ export async function checkAndDispatchScheduledNotifications(forceAllDue = false
   // 4. Advance Duty Reminder Check (Tomorrow's Duty)
   // ==========================================
   if (settings.advanceDutyReminder !== false) {
-    const tmr = new Date(now);
-    tmr.setDate(tmr.getDate() + 1);
-    const tmrStr = `${tmr.getFullYear()}-${String(tmr.getMonth() + 1).padStart(2, '0')}-${String(tmr.getDate()).padStart(2, '0')}`;
+    const tmrDateObj = new Date(bNow.timestamp + 24 * 60 * 60 * 1000 + 7 * 60 * 60 * 1000);
+    const tmrStr = `${tmrDateObj.getUTCFullYear()}-${String(tmrDateObj.getUTCMonth() + 1).padStart(2, '0')}-${String(tmrDateObj.getUTCDate()).padStart(2, '0')}`;
     const advDutyTime = settings.advanceDutyReminderTime || '17:00';
 
     if (settings.lastAdvanceDutyReminderDate !== tmrStr || forceAllDue) {
@@ -409,18 +427,18 @@ export async function checkAndDispatchScheduledNotifications(forceAllDue = false
   // ==========================================
   // 5. Birthday Greetings Check
   // ==========================================
-  const bdayTime = settings.birthdayGreetingTime || '07:00';
+  const bdayTime = settings.birthdayGreetingTime || '06:00';
   if (currentTimeStr >= bdayTime || forceAllDue) {
-    const todayMMDD = `${month}-${day}`;
+    const todayMMDD = `${bNow.month}-${bNow.day}`;
     for (const bday of data.birthdays || []) {
       if (bday.birthDate && bday.birthDate.endsWith(todayMMDD)) {
         if (!bday.greetingsSentYears) bday.greetingsSentYears = [];
-        if (!bday.greetingsSentYears.includes(year) || forceAllDue) {
+        if (!bday.greetingsSentYears.includes(bNow.year) || forceAllDue) {
           console.log(`[SchedulerEngine] Triggering Birthday Greeting for ${bday.name}`);
           const res = await localStore.dispatchTelegram('BIRTHDAY', { birthday: bday });
           if (res.success) {
-            if (!bday.greetingsSentYears.includes(year)) {
-              bday.greetingsSentYears.push(year);
+            if (!bday.greetingsSentYears.includes(bNow.year)) {
+              bday.greetingsSentYears.push(bNow.year);
             }
             dispatchedItems.push(`อวยพรวันเกิดคุณ ${bday.name}`);
           }
@@ -437,7 +455,7 @@ export async function checkAndDispatchScheduledNotifications(forceAllDue = false
       success: true,
       dispatchedCount: dispatchedItems.length,
       dispatchedItems,
-      message: `ส่งการแจ้งเตือนตามกำหนดเวลาสำเร็จ ${dispatchedItems.length} รายการ`,
+      message: `ส่งการแจ้งเตือนตามกำหนดเวลาสำเร็จ ${dispatchedItems.length} รายการ: ${dispatchedItems.join(', ')}`,
     };
   }
 
@@ -445,7 +463,7 @@ export async function checkAndDispatchScheduledNotifications(forceAllDue = false
     success: true,
     dispatchedCount: 0,
     dispatchedItems: [],
-    message: 'ตรวจสอบแล้ว ไม่มีรายการแจ้งเตือนที่ถึงกำหนดในรอบนี้ (ระบบจะตรวจสอบให้อัตโนมัติทุกนาที)',
+    message: 'ตรวจสอบแล้ว ไม่มีรายการแจ้งเตือนที่ถึงกำหนดในรอบนี้ (ระบบจะตรวจสอบให้อัตโนมัติทุก 30 วินาที)',
   };
 }
 

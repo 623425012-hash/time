@@ -231,7 +231,10 @@ export interface ScheduledJobItem {
   targetTime: string;
   timingLabel: string;
   scheduledDateTime: string;
+  triggerDateTime?: string;
   status: 'PENDING' | 'SENT' | 'DUE_NOW';
+  isSent?: boolean;
+  isDue?: boolean;
   details?: string;
 }
 

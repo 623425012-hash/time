@@ -265,6 +265,65 @@ export class TelegramService {
     return this.sendMessage(message, 'EVENT_CHANGED', newEvent.id);
   }
 
+  public static async sendTodayAllEventsAlert(targetDateStr: string): Promise<{ success: boolean; message: string; count: number }> {
+    const events = db.getData().events.filter(
+      (e) => e.status === 'APPROVED' && e.startDate <= targetDateStr && e.endDate >= targetDateStr
+    );
+    const dayName = formatThaiDayOfWeek(targetDateStr);
+    const fullDate = formatThaiDate(targetDateStr);
+
+    let message = `🔔 <b>แจ้งเตือนกิจกรรมประจำวันนี้ (${dayName}ที่ ${fullDate})</b>\n`;
+    message += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+    if (events.length === 0) {
+      message += `✨ <b>วันนี้ไม่มีกิจกรรมที่กำหนดไว้ในปฏิทินโรงเรียน</b>\n\n`;
+    } else {
+      events.sort((a, b) => (a.startTime || '00:00').localeCompare(b.startTime || '00:00'));
+      message += `📌 <b>กิจกรรมที่จัดขึ้นในวันนี้ (${events.length} รายการ)</b>:\n\n`;
+      events.forEach((ev, idx) => {
+        const timeStr = ev.isAllDay ? 'ตลอดทั้งวัน' : `${ev.startTime || '08:30'} - ${ev.endTime || '16:30'} น.`;
+        const priorityIcon = ev.priority === 'URGENT' ? '🔴 [ด่วนที่สุด]' : ev.priority === 'IMPORTANT' ? '🟠 [สำคัญ]' : '🔵 [ทั่วไป]';
+        message += `<b>${idx + 1}. ${escapeHtml(ev.title)}</b> ${priorityIcon}\n`;
+        message += `   ⏰ <b>เวลา</b>: ${timeStr}\n`;
+        message += `   📍 <b>สถานที่</b>: ${escapeHtml(ev.location || 'ในสถานศึกษา')}\n`;
+        message += `   👤 <b>ผู้รับผิดชอบ</b>: ${escapeHtml(ev.coordinator || '-')} (${escapeHtml(ev.department || '-')})\n`;
+        if (ev.targetGroup) {
+          message += `   👥 <b>กลุ่มเป้าหมาย</b>: ${escapeHtml(ev.targetGroup)}\n`;
+        }
+        if (ev.description) {
+          message += `   📝 <i>${escapeHtml(ev.description)}</i>\n`;
+        }
+        message += `\n`;
+      });
+    }
+
+    // Include Duty Set information
+    const dutySchedule = (db.getData().dutySchedules || []).find((s) => s.date === targetDateStr);
+    if (dutySchedule) {
+      const dutyGroup = (db.getData().dutyGroups || []).find((g) => g.id === dutySchedule.groupId);
+      if (dutyGroup) {
+        message += `🛡️ <b>ชุดครูเวรประจำวัน</b>: <b>${escapeHtml(dutyGroup.name)}</b>\n`;
+        const members = dutySchedule.membersSnapshot || dutyGroup.members || [];
+        const leader = members.find((m) => m.roleInGroup === 'LEADER');
+        if (leader) {
+          const leaderPhone = leader.phone ? ` (📞 ${leader.phone})` : '';
+          message += `• 👑 หัวหน้าชุด: ${escapeHtml(leader.name)}${leaderPhone}\n`;
+        }
+        const regularMembers = members.filter((m) => m.roleInGroup !== 'LEADER');
+        if (regularMembers.length > 0) {
+          message += `• 👥 สมาชิก: ${regularMembers.map((m) => escapeHtml(m.name)).join(', ')}\n`;
+        }
+        message += `\n`;
+      }
+    }
+
+    message += `━━━━━━━━━━━━━━━━━━━━\n`;
+    message += `🏫 <i>${escapeHtml(db.getData().systemSettings.schoolName)}</i>`;
+
+    const res = await this.sendMessage(message, 'DAILY_SUMMARY');
+    return { ...res, count: events.length };
+  }
+
   public static async sendDailySummary(targetDateStr: string): Promise<{ success: boolean; message: string }> {
     const events = db.getData().events.filter(
       (e) => e.status === 'APPROVED' && e.startDate <= targetDateStr && e.endDate >= targetDateStr

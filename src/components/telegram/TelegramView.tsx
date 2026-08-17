@@ -58,6 +58,7 @@ export const TelegramView: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [checkingScheduled, setCheckingScheduled] = useState(false);
+  const [broadcastingTodayEvents, setBroadcastingTodayEvents] = useState(false);
   const [broadcastingDaily, setBroadcastingDaily] = useState(false);
   const [broadcastingDuty, setBroadcastingDuty] = useState(false);
   const [broadcastingAdvanceDuty, setBroadcastingAdvanceDuty] = useState(false);
@@ -188,6 +189,19 @@ export const TelegramView: React.FC = () => {
     }
   };
 
+  const handleBroadcastTodayEvents = async () => {
+    setBroadcastingTodayEvents(true);
+    try {
+      const res = await api.post<{ success: boolean; message?: string; count?: number }>('/settings/telegram/broadcast-today-events');
+      showToast('success', 'ส่งแจ้งเตือนกิจกรรมวันนี้สำเร็จ', res.message || 'ส่งสรุปกิจกรรมวันนี้ทั้งหมดไปยัง Telegram แล้ว');
+      fetchSettingsAndLogs();
+    } catch (err: any) {
+      showToast('error', 'ส่งแจ้งเตือนกิจกรรมวันนี้ล้มเหลว', err?.message || 'ไม่สามารถส่งแจ้งเตือนได้');
+    } finally {
+      setBroadcastingTodayEvents(false);
+    }
+  };
+
   const handleBroadcastDailySummary = async () => {
     setBroadcastingDaily(true);
     try {
@@ -293,30 +307,30 @@ export const TelegramView: React.FC = () => {
         {/* Quick broadcast & manual trigger toolbar */}
         <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => handleCheckScheduledNow(false)}
-            disabled={checkingScheduled || !isConfigured}
-            title="ตรวจหาและส่งการแจ้งเตือนที่ถึงกำหนดเวลาทันที"
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-900 text-xs font-bold shadow-xs transition-all disabled:opacity-50"
+            onClick={handleBroadcastTodayEvents}
+            disabled={broadcastingTodayEvents || !isConfigured}
+            title="ส่งแจ้งเตือนกิจกรรมทั้งหมดของวันนี้ (06:00 น.) ไปยัง Telegram ทันที"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-bold shadow-sm transition-all disabled:opacity-50"
           >
-            <Play className={`w-3.5 h-3.5 fill-current ${checkingScheduled ? 'animate-spin' : ''}`} />
-            <span>{checkingScheduled ? 'กำลังตรวจหา...' : 'รันระบบเตือนล่วงหน้า'}</span>
+            <Radio className={`w-3.5 h-3.5 ${broadcastingTodayEvents ? 'animate-spin' : ''}`} />
+            <span>{broadcastingTodayEvents ? 'กำลังส่งแจ้งเตือน...' : '📢 แจ้งเตือนกิจกรรมวันนี้'}</span>
           </button>
 
           <button
-            onClick={handleBroadcastDailySummary}
-            disabled={broadcastingDaily || !isConfigured}
-            title="ส่งสรุปกิจกรรมวันนี้และพรุ่งนี้ไปยังกลุ่มทันที"
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all disabled:opacity-50"
+            onClick={() => handleCheckScheduledNow(false)}
+            disabled={checkingScheduled || !isConfigured}
+            title="ตรวจหาและส่งการแจ้งเตือนที่ถึงกำหนดเวลาทันที"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-900 text-xs font-bold shadow-xs transition-all disabled:opacity-50"
           >
-            <Radio className={`w-3.5 h-3.5 ${broadcastingDaily ? 'animate-spin' : ''}`} />
-            <span>{broadcastingDaily ? 'กำลังส่ง...' : 'สรุปกิจกรรมวันนี้'}</span>
+            <Play className={`w-3.5 h-3.5 fill-current ${checkingScheduled ? 'animate-spin' : ''}`} />
+            <span>{checkingScheduled ? 'กำลังตรวจหา...' : 'รันคิวเตือนล่วงหน้า'}</span>
           </button>
 
           <button
             onClick={handleBroadcastDutyToday}
             disabled={broadcastingDuty || !isConfigured}
             title="ส่งรายชื่อชุดครูเวรประจำวันไปยังกลุ่มทันที"
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-xs transition-all disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-95 text-white text-xs font-bold shadow-xs transition-all disabled:opacity-50"
           >
             <Users className={`w-3.5 h-3.5 ${broadcastingDuty ? 'animate-spin' : ''}`} />
             <span>{broadcastingDuty ? 'กำลังส่ง...' : 'แจ้งเวรวันนี้'}</span>
@@ -326,7 +340,7 @@ export const TelegramView: React.FC = () => {
             onClick={handleBroadcastDutyAdvance}
             disabled={broadcastingAdvanceDuty || !isConfigured}
             title="ส่งแจ้งเตือนชุดครูเวรวันพรุ่งนี้ล่วงหน้า"
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-all disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold shadow-xs transition-all disabled:opacity-50"
           >
             <CalendarCheck className={`w-3.5 h-3.5 ${broadcastingAdvanceDuty ? 'animate-spin' : ''}`} />
             <span>{broadcastingAdvanceDuty ? 'กำลังส่ง...' : 'เตือนเวรวันพรุ่งนี้'}</span>
@@ -336,7 +350,7 @@ export const TelegramView: React.FC = () => {
             onClick={handleBroadcastBirthdaysToday}
             disabled={broadcastingBirthday || !isConfigured}
             title="ส่งคำอวยพรวันเกิดบุคลากรที่มีวันเกิดวันนี้"
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-pink-600 hover:bg-pink-700 text-white text-xs font-bold shadow-xs transition-all disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-pink-600 hover:bg-pink-700 active:scale-95 text-white text-xs font-bold shadow-xs transition-all disabled:opacity-50"
           >
             <Gift className={`w-3.5 h-3.5 ${broadcastingBirthday ? 'animate-spin' : ''}`} />
             <span>{broadcastingBirthday ? 'กำลังส่ง...' : 'อวยพรวันเกิด'}</span>
@@ -493,10 +507,56 @@ export const TelegramView: React.FC = () => {
 
               {/* Timings Configuration Section */}
               <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-4">
-                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                  <Clock className="w-4 h-4 text-blue-500" />
-                  การตั้งค่าเวลาสำหรับการแจ้งเตือนแต่ละประเภท
-                </h4>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <Clock className="w-4 h-4 text-blue-500" />
+                    การตั้งค่าเวลาสำหรับการแจ้งเตือนแต่ละประเภท
+                  </h4>
+
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <span className="text-slate-400 text-[11px]">เซ็ตเวลาเช้าเร็ว:</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSettings({
+                          ...settings,
+                          dailySummaryTime: '06:00',
+                          advanceNotificationTime: '06:00',
+                          dutyReminderTime: '06:00',
+                        })
+                      }
+                      className="px-2 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[11px] font-bold cursor-pointer transition-all"
+                    >
+                      06:00 น. (แนะนำ)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSettings({
+                          ...settings,
+                          dailySummaryTime: '06:30',
+                          dutyReminderTime: '06:30',
+                        })
+                      }
+                      className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 text-[11px] font-medium cursor-pointer transition-all"
+                    >
+                      06:30 น.
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSettings({
+                          ...settings,
+                          dailySummaryTime: '07:00',
+                          dutyReminderTime: '07:00',
+                        })
+                      }
+                      className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 text-[11px] font-medium cursor-pointer transition-all"
+                    >
+                      07:00 น.
+                    </button>
+                  </div>
+                </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                   {/* Advance event reminder time */}
